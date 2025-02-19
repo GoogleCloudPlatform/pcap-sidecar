@@ -80,11 +80,12 @@ The pcap sidecar has images that are compatible with both [Cloud Run execution e
   - `us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar:newest`
   - `us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar:v#.#.#-gen2`
 
-## How to deploy to Cloud Run
+## How to deploy pcap sidecar to Cloud Run
 
 1. Define environment variables to be used during Cloud Run service deployment:
 
    ```sh
+   export PROJECT_ID='...'             # GCP Project ID
    export SERVICE_NAME='...'           # Cloud Run or App Engine Flex service name
    export SERVICE_REGION='...'         # GCP Region: https://cloud.google.com/about/locations
    export SERVICE_ACCOUNT='...'        # Cloud Run service's identity
@@ -118,12 +119,18 @@ gcloud run deploy ${SERVICE_NAME} \
   --container=${TCPDUMP_SIDECAR_NAME} \
   --image=${TCPDUMP_IMAGE_URI} \
   --cpu=1 --memory=1G \
-  --set-env-vars="PCAP_IFACE=${PCAP_IFACE},PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET},PCAP_FILTER=${PCAP_FILTER},PCAP_JSON_LOG=${PCAP_JSON_LOG} \
+  --set-env-vars="PCAP_IFACE=${PCAP_IFACE},PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET},PCAP_FILTER=${PCAP_FILTER},PCAP_JSON_LOG=${PCAP_JSON_LOG}"
 ```
 
 > See the full list of available flags for `gcloud run deploy` at https://cloud.google.com/sdk/gcloud/reference/run/deploy
 
-3. All containers need to depend on the `tcpdump` sidecar, but this configuration is not available via gcloud due to needing to configure healthchecks for the sidecar container. To make all containers depend on the `tcpdump` sidecar, edit the Cloud Run service via the Cloud Console and make all other containers depend on the `tcpdump` sidecar and add the following TCP startup probe healthcheck to the `tcpdump` sidecar:
+## Final setup
+
+### Configure tcpdump sidecar healthchecks
+
+1. All containers need to depend on the `tcpdump` sidecar, but this configuration is not available via gcloud due to needing to configure healthchecks for the sidecar container. To make all containers depend on the `tcpdump` sidecar, edit the Cloud Run service via the Cloud Console and make all other containers depend on the `tcpdump` sidecar.
+
+2. Add the following TCP startup probe healthcheck to the `tcpdump` sidecar:
 
 ```yaml
 startupProbe:
@@ -135,6 +142,10 @@ startupProbe:
 ```
 
 > You can optionally choose a different port by setting `PCAP_HC_PORT` as an env var of the `tcpdump` sidecar
+
+### Configure Cloud Storage Bucket for PCAP file upload
+
+1. Configure the Cloud Storage Bucket.  Give the runtime service account the `roles/storage.admin` on the bucket so that it may create objects and read bucket metadata.
 
 ## Available configurations
 
@@ -344,6 +355,7 @@ This approach assumes that Artifact Registry is available in `PROJECT_ID`.
    export REPO_LOCATION='...' # Artifact Registry Docker repository location e.g. us-central1
    export REPO_NAME='...'     # Artifact Registry Docker repository name
    export IMAGE_NAME='...'    # container image name; i/e: `pcap-sidecar`
+   export TAG_NAME='...'      # container image tag; i/e: `v1.0.0-RC`
    ```
 
 5. Build and push the `tcpdump` sidecar container image using Cloud Build:
@@ -352,7 +364,7 @@ This approach assumes that Artifact Registry is available in `PROJECT_ID`.
    gcloud builds submit \
      --project=${PROJECT_ID} \
      --config=$(pwd)/cloudbuild.yaml \
-     --substitutions='_REPO_LOCATION=${REPO_LOCATION},_REPO_NAME=${REPO_NAME},_IMAGE_NAME=${IMAGE_NAME}' $(pwd)
+     --substitutions="_REPO_LOCATION=${REPO_LOCATION},_REPO_NAME=${REPO_NAME},_IMAGE_NAME=${IMAGE_NAME},_TAG_NAME=${TAG_NAME}" $(pwd)
    ```
 
 > See the full list of available flags for `gcloud builds submit`: https://cloud.google.com/sdk/gcloud/reference/builds/submit
