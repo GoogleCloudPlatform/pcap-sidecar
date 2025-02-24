@@ -1,10 +1,10 @@
-# Cloud Run `tcpdump` sidecar
+# Cloud Run PCAP sidecar
 
 This repository contains the source code to create a container image containing `tcpdump` and `pcap-cli` to perform packet capture in [Cloud Run multi-container](https://cloud.google.com/logging/docs/structured-logging) deployments.
 
 Captured packets are optionally translated to JSON and written into [`Cloud Logging`](https://cloud.google.com/logging/docs/structured-logging)
 
-![alt text](https://github.com/gchux/cloud-run-tcpdump/blob/main/img/pcap.png?raw=true)
+![alt text](https://github.com/GoogleCloudPlatform/pcap-sidecar/blob/main/img/pcap.png?raw=true)
 
 ## Motivation
 
@@ -44,7 +44,6 @@ The sidecar approach enables decoupling from the main –_ingress_– container 
 - [fsnotify](https://github.com/fsnotify/fsnotify) to listen for filesystem events.
 - [gocron](https://github.com/go-co-op/gocron) to schedule execution of `tcpdump`.
 - [Docker Engine](https://docs.docker.com/engine/) and [Docker CLI](https://docs.docker.com/engine/reference/commandline/cli/) to build the sidecar container image.
-- [pcap-cli](https://github.com/gchux/pcap-cli/tree/main) to perform packet capturing and translations to JSON.
 
 ## How it works
 
@@ -52,9 +51,9 @@ The sidecar uses:
 
 - **`tcpdump`**/**`pcap-cli`** to capture packets in both wireshark compatible format and `JSON`. All containers use the same network namespace and so this sidecar captures packets from all containers within the same instance.
 
-- [**`pcap-cli`**](https://github.com/gchux/pcap-cli) allows to perform packet translations into [Cloud Logging compatible structured `JSON`](https://cloud.google.com/logging/docs/structured-logging). It also provides `HTTP/1.1` and `HTTP/2` analysis, including [Trace context](https://cloud.google.com/trace/docs/trace-context) awareness (`X-Cloud-Trace-Context`/`traceparenmt`) to hydrate structured logging with trace information which allows rich network data analysis using [Cloud Trace](https://cloud.google.com/trace/docs/overview).
+- [**`pcap-cli`**](https://github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli) allows to perform packet translations into [Cloud Logging compatible structured `JSON`](https://cloud.google.com/logging/docs/structured-logging). It also provides `HTTP/1.1` and `HTTP/2` analysis, including [Trace context](https://cloud.google.com/trace/docs/trace-context) awareness (`X-Cloud-Trace-Context`/`traceparenmt`) to hydrate structured logging with trace information which allows rich network data analysis using [Cloud Trace](https://cloud.google.com/trace/docs/overview).
 
-- [**`tcpdumpw`**](tcpdumpw/main.go) to execute `tcpdump`/[`pcap-cli`](https://github.com/gchux/pcap-cli) and generate **PCAP files**; optionally, schedules `tcpdump`/`pcap-cli` executions.
+- [**`tcpdumpw`**](tcpdumpw/main.go) to execute `tcpdump`/[`pcap-cli`](https://github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli) and generate **PCAP files**; optionally, schedules `tcpdump`/`pcap-cli` executions.
 
 - [**`pcap-fsnotify`**](pcap-fsnotify/main.go) to listen for newly created **PCAP files**, optionally compress PCAPs ( _**recommended**_ ) and move them into Cloud Storage mount point.
 
@@ -88,17 +87,19 @@ The pcap sidecar has images that are compatible with both [Cloud Run execution e
    export PROJECT_ID='...'             # GCP Project ID
    export SERVICE_NAME='...'           # Cloud Run or App Engine Flex service name
    export SERVICE_REGION='...'         # GCP Region: https://cloud.google.com/about/locations
-   export SERVICE_ACCOUNT='...'        # Cloud Run service's identity
-   export INGRESS_CONTAINER_NAME='...' # the name of the ingress container i/e: `app`
+   export SERVICE_ACCOUNT='...'        # Cloud Run service's identity.
+   export INGRESS_CONTAINER_NAME='...' # the name of the ingress container i/e: `app`.
    export INGRESS_IMAGE_URI='...'
    export INGRESS_PORT='...'
-   export TCPDUMP_SIDECAR_NAME='...'   # the name of the pcap sidecar i/e: `pcap-sidecar`
+   export PCAP_SIDECAR_NAME='...'      # the name of the pcap sidecar i/e: `pcap-sidecar`.
+
    # public image compatible with both gen1 & gen2. Alternatively build your own
-   export TCPDUMP_IMAGE_URI='us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar:latest'
-   export PCAP_IFACE='eth'             # prefix of the interface in which packets should be captured from
-   export PCAP_GCS_BUCKET='...'        # the name of the Cloud Storage Bucket to mount
-   export PCAP_FILTER='...'            # the BPF filter to use; i/e: `tcp port 443`
-   export PCAP_JSON_LOG=true           # set to `true` for writting structured logs into Cloud Logging
+   export PCAP_SIDECAR_IMAGE_URI='us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar:latest'
+
+   export PCAP_IFACE='eth'             # prefix of the interface in which packets should be captured from ( for Cloud Run gen1 it must be `any` ).
+   export PCAP_GCS_BUCKET='...'        # the name of the Cloud Storage Bucket to mount.
+   export PCAP_FILTER='...'            # the BPF filter to use; i/e: `tcp port 443`.
+   export PCAP_JSON_LOG=true           # set to `true` for writting structured logs into Cloud Logging.
    ```
 
 2. Deploy the Cloud Run service including the `tcpdump` sidecar:
@@ -116,8 +117,8 @@ gcloud run deploy ${SERVICE_NAME} \
   --container=${INGRESS_CONTAINER_NAME} \
   --image=${INGRESS_IMAGE_URI} \
   --port=${INGRESS_PORT} \
-  --container=${TCPDUMP_SIDECAR_NAME} \
-  --image=${TCPDUMP_IMAGE_URI} \
+  --container=${PCAP_SIDECAR_NAME} \
+  --image=${PCAP_SIDECAR_IMAGE_URI} \
   --cpu=1 --memory=1G \
   --set-env-vars="PCAP_IFACE=${PCAP_IFACE},PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET},PCAP_FILTER=${PCAP_FILTER},PCAP_JSON_LOG=${PCAP_JSON_LOG}"
 ```
@@ -128,28 +129,31 @@ gcloud run deploy ${SERVICE_NAME} \
 
 ### Configure tcpdump sidecar healthchecks
 
-1. All containers need to depend on the `tcpdump` sidecar, but this configuration is not available via gcloud due to needing to configure healthchecks for the sidecar container. To make all containers depend on the `tcpdump` sidecar, edit the Cloud Run service via the Cloud Console and make all other containers depend on the `tcpdump` sidecar.
+1. In order to troubleshoot network conditions happening on container startup, any container may to depend on the **PCAP sidecar**. To make all containers depend on the **PCAP sidecar**, edit the Cloud Run service via the Cloud Console and make all other containers depend on the **PCAP sidecar**.
 
 2. Add the following TCP startup probe healthcheck to the `tcpdump` sidecar:
 
-```yaml
-startupProbe:
-  timeoutSeconds: 1
-  periodSeconds: 10
-  failureThreshold: 10
-  tcpSocket:
-    port: 12345
-```
+   ```yaml
+   startupProbe:
+     timeoutSeconds: 1
+     periodSeconds: 10
+     failureThreshold: 10
+     tcpSocket:
+       port: 12345
+   ```
 
+> [!NOTE]
+> This configuration is not available via gcloud due to needing to configure healthchecks for the sidecar containers.
+>
 > You can optionally choose a different port by setting `PCAP_HC_PORT` as an env var of the `tcpdump` sidecar
 
 ### Configure Cloud Storage Bucket for PCAP file upload
 
-1. Configure the Cloud Storage Bucket.  Give the runtime service account the `roles/storage.admin` on the bucket so that it may create objects and read bucket metadata.
+1. Configure the Cloud Storage Bucket by giving the runtime service account the `roles/storage.admin` on the bucket so that it may create objects and read bucket metadata.
 
 ## Available configurations
 
-The `tcpdump` sidecar accepts the following environment variables:
+The **PCAP sidecar** accepts the following environment variables:
 
 - `PCAP_IFACE`: (STRING, **required**) a prefix for the interface to perform packet capturing on; i/e: `eth`, `ens`...
 
@@ -221,15 +225,15 @@ More advanced use cases may benefit from scheduling `tcpdump` executions. Use th
 
   > **NOTE**: if `PCAP_USE_CRON` is set to `true`, you should set this value to less than the time in seconds between scheduled executions.
 
-- **`PCAP_COMPAT`**: (BOOLEAN, _optional_) whether to run the PCAP sidecar in Cloud Run gen1 compatible mode; default value is `false`.
+- **`PCAP_COMPAT`**: (BOOLEAN, _optional_) whether to run the **PCAP sidecar** in Cloud Run gen1 compatible mode; default value is `false`.
 
   > When using `latest` or `gen1` container images, this environment variable will be automatically set to `true`.
 
 ## Considerations
 
-- The Cloud Storage Bucket mounted by the `tcpdump` sidecar is not accessible by the main –ingress– container.
+- The Cloud Storage Bucket mounted by the **PCAP sidecar** is not accessible by the main –ingress– container.
 
-- Processes running in the `tcpdump` sidecar are not visible to the main –_ingress_– container ( or any other container ); similarly, the `tcpdump` sidecar doesn't have visibility of processes running in other containers.
+- Processes running in the **PCAP sidecar** are not visible to the main –_ingress_– container ( or any other container ); similarly, the **PCAP sidecar** doesn't have visibility of processes running in other containers.
 
 - All **PCAP files** will be stored within the Cloud Storage Bucket with the following "_hierarchy_": `PROJECT_ID`/`SERVICE_NAME`/`GCP_REGION`/`REVISION_NAME`/`INSTANCE_STARTUP_TIMESTAMP`/`INSTANCE_ID`.
 
@@ -254,7 +258,7 @@ More advanced use cases may benefit from scheduling `tcpdump` executions. Use th
 
 - In order to be able to mount the Cloud Storage Bucket and store **PCAP files**, [Cloud Run's identity](https://cloud.google.com/run/docs/securing/service-identity) must have proper [roles/permissions](https://cloud.google.com/storage/docs/access-control/iam-permissions).
 
-- The `tcpdump` sidecar is intended to be used for troubleshooting purposes only. While the `tcpdump` sidecar has its own set of resources, storing bytes from **PCAP files** in Cloud Storage and logging packet translations into Cloud Logging introduces additional costs for both Storage and Networking.
+- The **PCAP sidecar** is intended to be used for troubleshooting purposes only. While the **PCAP sidecar** has its own set of resources, storing bytes from **PCAP files** in Cloud Storage and logging packet translations into Cloud Logging introduces additional costs for both Storage and Networking.
 
   - Define a BPF filter to capture just the required packets, and nothing else; examples of bad filters for long running or data intensive tests: `tcp`, `tcp or udp`, `tcp port 443`, etc...
 
@@ -262,11 +266,11 @@ More advanced use cases may benefit from scheduling `tcpdump` executions. Use th
 
   - Whenever possible, use packet capturing scheduling to avoid running `tcpdump` 100% of instance lifetime.
 
-  - When troubleshooting is complete, deploy a new Revision without the `tcpdump` sidecar to completely disable it.
+  - When troubleshooting is complete, deploy a new Revision without the **PCAP sidecar** to completely disable it.
 
-- While it is true that [Cloud Storage volume mounts](https://cloud.google.com/run/docs/configuring/services/cloud-storage-volume-mounts) is an available built in feature of Cloud Run, GCSFuse is used instead to minimize the required configuration to deploy a Revision instrumented with the `tcpdump` sidecar.
+- While it is true that [Cloud Storage volume mounts](https://cloud.google.com/run/docs/configuring/services/cloud-storage-volume-mounts) is an available built in feature of Cloud Run, GCSFuse is used instead to minimize the required configuration to deploy a Revision instrumented with the **PCAP sidecar**.
 
-  > **NOTE**: this is also the reason why the base image for the `tcpdump` sidecar is `ubuntu:22.04` and not something lighter like `alpine`. GCSFuse pre-built packages are only available for Debian and RPM based distributions.
+  > **NOTE**: this is also the reason why the base image for the **PCAP sidecar** is `ubuntu:22.04` and not something lighter like `alpine`. GCSFuse pre-built packages are only available for Debian and RPM based distributions.
 
 - While setting `PCAP_ORDER` to `true` is a good alternative for low traffic scenarios, it is recommended setting it to `false` for most other cases since the level of concurrency is reduced (only for translations) in order to guarantee packet order.
 
@@ -318,14 +322,14 @@ More advanced use cases may benefit from scheduling `tcpdump` executions. Use th
 
 ---
 
-## How to build the sidecar yourself
+## How to build the PCAP sidecar yourself
 
 1. Define the `PROJECT_ID` environment variable; i/e: `export PROJECT_ID='...'`.
 
 2. Clone this repository:
 
    ```sh
-   git clone --depth=1 --branch=main --single-branch https://github.com/gchux/cloud-run-tcpdump.git
+   git clone --depth=1 --branch=main --single-branch https://github.com/GoogleCloudPlatform/pcap-sidecar.git
    ```
 
 > [!TIP]
@@ -337,7 +341,7 @@ Continue with one of the following alternatives:
 
 ### Using a local environment or [Cloud Shell](https://cloud.google.com/shell/docs/launching-cloud-shell)
 
-4. Build and push the `tcpdump` sidecar container image:
+4. Build and push the **PCAP sidecar** container image:
 
    ```sh
    export TCPDUMP_IMAGE_URI='...'   # this is usually Artifact Registry e.g. '${_REPO_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}'
@@ -358,7 +362,7 @@ This approach assumes that Artifact Registry is available in `PROJECT_ID`.
    export TAG_NAME='...'      # container image tag; i/e: `v1.0.0-RC`
    ```
 
-5. Build and push the `tcpdump` sidecar container image using Cloud Build:
+5. Build and push the **PCAP sidecar** container image using Cloud Build:
 
    ```sh
    gcloud builds submit \

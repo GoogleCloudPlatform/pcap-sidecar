@@ -1,4 +1,4 @@
-module github.com/gchux/cloud-run-tcpdump/pcap-fsnotify
+module github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify
 
 go 1.22.4
 

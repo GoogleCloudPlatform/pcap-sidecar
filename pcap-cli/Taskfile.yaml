@@ -1,0 +1,89 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: "3"
+
+dotenv: [".env"]
+
+tasks:
+  clean:
+    cmds:
+      - find . -type f -name '*_string.go' -print0 | xargs -0 rm -vf
+      - find $PB_OUTPUT_DIR -type f -name '*.pb.go' -print0 | xargs -0 rm -vf
+
+  proto-gen:
+    cmds:
+      - >-
+        docker run --user=$USER_ID
+        -v {{.USER_WORKING_DIR}}:/defs
+        namely/protoc-all -d $PB_INPUT_DIR --lint
+        -o $PB_OUTPUT_DIR -l go --go-source-relative
+
+  go-fmt:
+    cmds:
+      - cmd: gofumpt -l -w .
+        ignore_error: true
+
+  go-gen:
+    cmds:
+      - task: clean
+      - task: go-fmt
+      - task: proto-gen
+      - task: go-gen
+      - go generate ./...
+
+  go-test:
+    cmds:
+      - go test -v ./pkg/...
+
+  build:
+    dotenv: [".env"]
+    cmds:
+      - task: clean
+      - task: go-fmt
+      - task: proto-gen
+      - task: go-gen
+      - task: go-test
+      - >-
+        go build
+        -o bin/$PCAP_BIN_NAME
+        -tags json,text,proto
+        {{if .VERBOSE}}-v -a{{end}}
+        cmd/pcap.go
+    sources:
+      - ./**/*.go
+    generates:
+      - ./release/bin/pcap
+
+  dist:
+    cmds:
+      - task: build
+        vars:
+          VERBOSE: true
+
+  docker-build:
+    cmds:
+      - task: clean
+      - task: proto-gen
+      - >-
+        docker buildx build
+        --platform=linux/amd64
+        --no-cache --file=Dockerfile
+        --build-arg="BIN_NAME=$PCAP_BIN_NAME"
+        --output={{.USER_WORKING_DIR}}/release
+        --target=releaser {{.USER_WORKING_DIR}}
+    sources:
+      - ./**/*.go
+    generates:
+      - ./release/bin/pcap

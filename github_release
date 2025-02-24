@@ -10,7 +10,7 @@ export MAIN_PID=$$
 
 export PCAP_SIDECAR_VERSION="v${1}"
 export PCAP_SIDECAR_IMAGE_URI='us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar'
-export PCAP_SIDECAR_GITHUB_URI='ghcr.io/gchux/cloud-run-tcpdump'
+export PCAP_SIDECAR_GITHUB_URI='ghcr.io/GoogleCloudPlatform/pcap-sidecar'
 
 function release_pcap_sidecar {
   local PCAP_SIDECAR_RELEASE_URI="${PCAP_SIDECAR_IMAGE_URI}:${1}"

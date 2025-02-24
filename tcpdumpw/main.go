@@ -36,14 +36,14 @@ import (
 	// _ "net/http/pprof"
 	_ "time/tzdata"
 
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli/pkg/pcap"
 	"github.com/alphadose/haxmap"
-	"github.com/gchux/pcap-cli/pkg/pcap"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/gofrs/flock"
 	"github.com/google/uuid"
 	"github.com/wissance/stringFormatter"
 
-	pcapFilter "github.com/gchux/cloud-run-tcpdump/tcpdumpw/pkg/filter"
+	pcapFilter "github.com/GoogleCloudPlatform/pcap-sidecar/tcpdumpw/pkg/filter"
 )
 
 func UNUSED(x ...interface{}) {}

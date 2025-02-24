@@ -1,14 +1,12 @@
-module github.com/gchux/cloud-run-tcpdump/tcpdumpw
+module github.com/GoogleCloudPlatform/pcap-sidecar/tcpdumpw
 
 go 1.22.4
 
-// replace github.com/gchux/pcap-cli v1.0.0-rc153 => ../pcap-cli
-// replace github.com/gchux/pcap-cli v1.0.0-rc153 => ./pcap-cli
+require github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli v0.0.0
 
 require (
 	github.com/alphadose/haxmap v1.4.0
 	github.com/deckarep/golang-set/v2 v2.6.0
-	github.com/gchux/pcap-cli v1.0.0-rc153
 	github.com/go-co-op/gocron/v2 v2.5.0
 	github.com/gofrs/flock v0.12.1
 	github.com/google/uuid v1.6.0
@@ -50,3 +48,5 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
+
+replace github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli => ../pcap-cli

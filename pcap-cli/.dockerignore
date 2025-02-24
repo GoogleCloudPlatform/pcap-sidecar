@@ -1,0 +1,7 @@
+**/.git
+**/.gitignore
+**/Taskfile.yaml
+**/README.md
+**/.task
+**/release
+Dockerfile

@@ -17,7 +17,7 @@ package filter
 import (
 	"context"
 
-	"github.com/gchux/pcap-cli/pkg/pcap"
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli/pkg/pcap"
 	"github.com/wissance/stringFormatter"
 )
 
