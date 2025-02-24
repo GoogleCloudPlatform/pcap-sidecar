@@ -23,7 +23,6 @@ export PCAPFSN_DIR="$(pwd)/pcap-fsnotify"
 export TCPDUMPW_DIR="$(pwd)/tcpdumpw"
 export GCSFUSE_DIR="$(pwd)/gcsfuse"
 
-export PCAPCLI_VERSION="$(grep 'pcap-cli v' ${TCPDUMPW_DIR}/go.mod | grep -v -E 'replace|require' | awk '{print $NF}' | sort | uniq | head -1 | tr -d '\n')"
 export DOCKER_TAG_SUFFIX="libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION}"
 
 if [ -d ${BIN_DIR} ]; then
@@ -69,7 +68,7 @@ function docker_build {
     --file="${1}/Dockerfile" \
     --build-arg="LIBPCAP_VERSION=${LIBPCAP_VERSION}" \
     --build-arg="TCPDUMP_VERSION=${TCPDUMP_VERSION}" \
-    --no-cache --output ${BIN_DIR} --target releaser "${1}"
+    --no-cache --output "${BIN_DIR}" --target releaser .
 
   if [ $? -ne 0 ]; then
     echo "failed to build: ${1}"
@@ -87,11 +86,10 @@ function docker_release {
     --build-arg="TCPDUMP_VERSION=${TCPDUMP_VERSION}" \
     --label="LIBPCAP_VERSION=${LIBPCAP_VERSION}" \
     --label="TCPDUMP_VERSION=${TCPDUMP_VERSION}" \
-    --label="PCAPCLI_VERSION=${PCAPCLI_VERSION}" \
     "--tag=$@" $(pwd)
 }
 
-echo "Building Cloud Run PCAP sidecar: LIBPCAP-v${LIBPCAP_VERSION} + TCPDUMP-v${TCPDUMP_VERSION} + PCAP_CLI-${PCAPCLI_VERSION}"
+echo "Building Cloud Run PCAP sidecar: LIBPCAP-v${LIBPCAP_VERSION} + TCPDUMP-v${TCPDUMP_VERSION}"
 
 docker_build_base base
 docker_build_base sidecar
@@ -107,7 +105,7 @@ if [[ "$PCAP_RT_ENV" == "cloud_run_gen1" ]]; then
 fi
 
 # Fully Qualified Docker Image Name
-FQDIN="${2}:${DOCKER_TAG_SUFFIX}_pcapcli-${PCAPCLI_VERSION}"
+FQDIN="${2}:${DOCKER_TAG_SUFFIX}"
 
 # build `tcpdump` sidecar image
 if [[ -z "${3}" ]]; then

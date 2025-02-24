@@ -21,12 +21,21 @@ FROM --platform=linux/amd64 pcap-golang:libpcap-v${LIBPCAP_VERSION}_tcpdump-v${T
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BIN_NAME='tcpdumpw'
 
-WORKDIR /app
+# include PCAP CLI
+WORKDIR /app/pcap-cli
 
-COPY ./go.mod go.mod
-COPY ./go.sum go.sum
-COPY ./main.go main.go
-COPY ./pkg pkg
+COPY ./pcap-cli/go.mod go.mod
+COPY ./pcap-cli/go.sum go.sum
+COPY ./pcap-cli/internal internal
+COPY ./pcap-cli/pkg pkg
+COPY ./pcap-cli/schema schema
+
+WORKDIR /app/tcpdumpw
+
+COPY ./tcpdumpw/go.mod go.mod
+COPY ./tcpdumpw/go.sum go.sum
+COPY ./tcpdumpw/main.go main.go
+COPY ./tcpdumpw/pkg pkg
 
 ENV GOOS=linux
 ENV GOARCH=amd64
@@ -35,7 +44,7 @@ RUN go install mvdan.cc/gofumpt@latest \
   && gofumpt -l -w ./main.go \
   && go mod tidy -compat=1.22.4 \
   && go mod download \
-  && go build -a -v -tags json -o /app/bin/${BIN_NAME} main.go
+  && go build -a -v -tags json -o /app/tcpdumpw/bin/${BIN_NAME} main.go
 
 FROM scratch AS releaser
-COPY --link --from=builder /app/bin/${BIN_NAME} /
+COPY --link --from=builder /app/tcpdumpw/bin/${BIN_NAME} /

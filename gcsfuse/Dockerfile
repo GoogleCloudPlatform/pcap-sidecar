@@ -25,14 +25,18 @@ ARG GCSFUSE_REPO='/run/gcsfuse'
 
 RUN apk add --no-cache --update git patch
 
-COPY ./patch /patch
+COPY ./gcsfuse/patch /patch
 
+# clone `gcsfuse` at specific version
 RUN git clone --depth 1 --branch v${GCSFUSE_VERSION} \
-  https://github.com/GoogleCloudPlatform/gcsfuse.git ${GCSFUSE_REPO} \
-  && patch ${GCSFUSE_REPO}/internal/fs/fs.go /patch/v${GCSFUSE_VERSION}/internal/fs/fs.go
+  https://github.com/GoogleCloudPlatform/gcsfuse.git ${GCSFUSE_REPO}
+
+# patch files
+RUN patch ${GCSFUSE_REPO}/internal/fs/fs.go /patch/v${GCSFUSE_VERSION}/internal/fs/fs.go
 
 WORKDIR ${GCSFUSE_REPO}/
 
+# build patched `gcsfuse`
 RUN git config --global pager.diff false \
   && git --no-pager diff ${GCSFUSE_REPO}/internal/fs/fs.go
 

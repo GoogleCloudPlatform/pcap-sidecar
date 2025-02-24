@@ -21,9 +21,9 @@ ARG BIN_NAME=pcap_fsn
 
 WORKDIR /app
 
-COPY ./go.mod go.mod
-COPY ./go.sum go.sum
-COPY ./main.go main.go
+COPY ./pcap-fsnotify/go.mod go.mod
+COPY ./pcap-fsnotify/go.sum go.sum
+COPY ./pcap-fsnotify/main.go main.go
 
 RUN go install mvdan.cc/gofumpt@latest
 
