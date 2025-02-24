@@ -1,6 +1,6 @@
 # Cloud Run PCAP sidecar
 
-This repository contains the source code to create a container image containing `tcpdump` and `pcap-cli` to perform packet capture in [Cloud Run multi-container](https://cloud.google.com/logging/docs/structured-logging) deployments.
+This repository contains the source code to create a container image containing `tcpdump` and [`pcap-cli`](https://github.com/GoogleCloudPlatform/pcap-sidecar/tree/main/pcap-cli) to perform packet capture in [Cloud Run multi-container](https://cloud.google.com/logging/docs/structured-logging) deployments.
 
 Captured packets are optionally translated to JSON and written into [`Cloud Logging`](https://cloud.google.com/logging/docs/structured-logging)
 
@@ -51,9 +51,9 @@ The sidecar uses:
 
 - **`tcpdump`**/**`pcap-cli`** to capture packets in both wireshark compatible format and `JSON`. All containers use the same network namespace and so this sidecar captures packets from all containers within the same instance.
 
-- [**`pcap-cli`**](https://github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli) allows to perform packet translations into [Cloud Logging compatible structured `JSON`](https://cloud.google.com/logging/docs/structured-logging). It also provides `HTTP/1.1` and `HTTP/2` analysis, including [Trace context](https://cloud.google.com/trace/docs/trace-context) awareness (`X-Cloud-Trace-Context`/`traceparenmt`) to hydrate structured logging with trace information which allows rich network data analysis using [Cloud Trace](https://cloud.google.com/trace/docs/overview).
+- [**`pcap-cli`**](https://github.com/GoogleCloudPlatform/pcap-sidecar/tree/main/pcap-cli) allows to perform packet translations into [Cloud Logging compatible structured `JSON`](https://cloud.google.com/logging/docs/structured-logging). It also provides `HTTP/1.1` and `HTTP/2` analysis, including [Trace context](https://cloud.google.com/trace/docs/trace-context) awareness (`X-Cloud-Trace-Context`/`traceparenmt`) to hydrate structured logging with trace information which allows rich network data analysis using [Cloud Trace](https://cloud.google.com/trace/docs/overview).
 
-- [**`tcpdumpw`**](tcpdumpw/main.go) to execute `tcpdump`/[`pcap-cli`](https://github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli) and generate **PCAP files**; optionally, schedules `tcpdump`/`pcap-cli` executions.
+- [**`tcpdumpw`**](tcpdumpw/main.go) to execute `tcpdump`/[`pcap-cli`](https://github.com/GoogleCloudPlatform/pcap-sidecar/tree/main/pcap-cli) and generate **PCAP files**; optionally, schedules `tcpdump`/`pcap-cli` executions.
 
 - [**`pcap-fsnotify`**](pcap-fsnotify/main.go) to listen for newly created **PCAP files**, optionally compress PCAPs ( _**recommended**_ ) and move them into Cloud Storage mount point.
 
