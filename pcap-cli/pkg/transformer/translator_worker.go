@@ -487,9 +487,7 @@ func (w *pcapTranslatorWorker) Run(ctx context.Context) (buffer interface{}) {
 	//   - if there aren't any filters, continue with translation.
 	// fail fast:
 	//   - do not translate any layers before enforcing filters.
-	if w.compat &&
-		w.filters != nil &&
-		!w.shouldTranslate(ctx) {
+	if w.filters != nil && !w.shouldTranslate(ctx) {
 		return nil
 	}
 

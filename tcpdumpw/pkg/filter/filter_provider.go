@@ -24,6 +24,11 @@ import (
 type (
 	pcapFilterProviderFactory = func(*pcap.PcapFilter, pcap.PcapFilters) pcap.PcapFilterProvider
 	PcapFilterProviderFactory = func(*string, pcap.PcapFilters) pcap.PcapFilterProvider
+
+	PcapFilterProvider interface {
+		pcap.PcapFilterProvider
+		Initialize(context.Context) pcap.PcapFilterProvider
+	}
 )
 
 func applyFilter(
@@ -96,4 +101,14 @@ func NewPortsFilterProvider(rawFilter *string, compatFilters pcap.PcapFilters) p
 
 func NewTCPFlagsFilterProvider(rawFilter *string, compatFilters pcap.PcapFilters) pcap.PcapFilterProvider {
 	return newPcapFilterProvider(rawFilter, compatFilters, newTCPFlagsFilterProvider)
+}
+
+func NewProcessFilterProvider(
+	supervisorURL *string,
+	processNames *string,
+	refreshSecs uint8,
+	debug bool,
+	compatFilters pcap.PcapFilters,
+) PcapFilterProvider {
+	return newProcessFilterProvider(supervisorURL, processNames, refreshSecs, debug, compatFilters)
 }

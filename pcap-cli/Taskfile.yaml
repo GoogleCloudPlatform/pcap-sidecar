@@ -45,7 +45,7 @@ tasks:
 
   go-test:
     cmds:
-      - go test -v ./pkg/...
+      - go test -parallel 10 -v ./pkg/...
 
   build:
     dotenv: [".env"]

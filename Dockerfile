@@ -27,6 +27,12 @@ COPY ./bin /bin
 COPY ./scripts /scripts
 COPY ./tcpdump.conf /tcpdump.conf
 
-RUN sed -i -e "s/@PCAP_RT_ENV@/${PCAP_RT_ENV}/g" /scripts/init && cp -vf /scripts/init /init
+COPY ./env/${PCAP_RT_ENV}.env /env/rt.env
 
-ENTRYPOINT ["/init"]
+# import env files for ALL supervised processes
+COPY ./env/tcpdumpw.env /env/tcpdumpw.env
+COPY ./env/pcapfsn.env /env/pcapfsn.env
+COPY ./env/gcsdir.env /env/gcsdir.env
+COPY ./env/gcsfuse.env /env/gcsfuse.env
+
+ENTRYPOINT ["/scripts/init"]

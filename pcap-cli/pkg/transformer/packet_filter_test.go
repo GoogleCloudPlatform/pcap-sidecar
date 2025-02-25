@@ -18,6 +18,10 @@ import (
 	"net/netip"
 	"strconv"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
+	sf "github.com/wissance/stringFormatter"
 )
 
 const (
@@ -42,11 +46,15 @@ const (
 	L4_PROTO_ICMP6 = L4Proto(0x3A)
 )
 
-func newPcapFilters() *pcapFilters {
+func newPcapFilters(
+	t *testing.T,
+) *pcapFilters {
+	t.Helper()
+
 	filters := NewPcapFilters()
 
 	filters.AddL3Protos(L3_PROTO_IPv4, L3_PROTO_IPv6)
-	filters.AddIPv4Ranges("169.254.0.0/16", "127.0.0.1/32")
+	filters.AddIPv4Ranges("169.254.0.0/16", "127.0.0.1/32", "10.0.0.0/8")
 	filters.AddIPv6Range("::1/128")
 
 	filters.AddL4Protos(L4_PROTO_TCP, L4_PROTO_UDP, L4_PROTO_ICMP4, L4_PROTO_ICMP6)
@@ -57,7 +65,7 @@ func newPcapFilters() *pcapFilters {
 }
 
 func TestRejectTCPfilter(t *testing.T) {
-	filters := newPcapFilters()
+	filters := newPcapFilters(t)
 
 	srcPort := uint16(27584)
 	dstPort := uint16(80)
@@ -72,31 +80,37 @@ func TestRejectTCPfilter(t *testing.T) {
 }
 
 func TestRejectIPv4Filter(t *testing.T) {
-	filters := newPcapFilters()
+	filters := newPcapFilters(t)
 
-	srcIPv6, _ := netip.ParseAddr("169.254.8.1")
+	srcIPv4, _ := netip.ParseAddr("169.254.8.1")
 	srcPort := uint16(27584)
-	dstIPv6, _ := netip.ParseAddr("169.254.169.254")
+	dstIPv4, _ := netip.ParseAddr("169.254.169.254")
 	dstPort := uint16(80)
 	tcpFlags := tcpFlagNil | tcpAck | tcpFin
 
 	t.Run("must-allow-IPv4", func(t *testing.T) {
-		if !filters.AllowsIP(&srcIPv6) {
-			t.Fatalf("must allow IPv4: %s", srcIPv6.String())
+		t.Parallel()
+
+		if !filters.AllowsIP(&srcIPv4) {
+			t.Fatalf("must allow IPv4: %s", srcIPv4.String())
 		}
 
-		if !filters.AllowsIP(&dstIPv6) {
-			t.Fatalf("must allow IPv4: %s", dstIPv6.String())
+		if !filters.AllowsIP(&dstIPv4) {
+			t.Fatalf("must allow IPv4: %s", dstIPv4.String())
 		}
 	})
 
 	t.Run("must-allow-TCP", func(t *testing.T) {
+		t.Parallel()
+
 		if !filters.AllowsTCP() {
 			t.Fatalf("must allow TCP")
 		}
 	})
 
 	t.Run("must-reject-TCP-ports", func(t *testing.T) {
+		t.Parallel()
+
 		if filters.AllowsL4Addr(&srcPort) {
 			t.Fatalf("must not allow TCP port: %d", srcPort)
 		}
@@ -107,6 +121,8 @@ func TestRejectIPv4Filter(t *testing.T) {
 	})
 
 	t.Run("must-allow-FIN+ACK-TCP-flag", func(t *testing.T) {
+		t.Parallel()
+
 		if !filters.AllowsAnyTCPflags(&tcpFlags) {
 			t.Fatalf("must allow TCP flag: 0b%s",
 				strconv.FormatUint(uint64(tcpFlags), 2))
@@ -115,31 +131,39 @@ func TestRejectIPv4Filter(t *testing.T) {
 }
 
 func TestAllowIPv6Filter(t *testing.T) {
-	filters := newPcapFilters()
+	filters := newPcapFilters(t)
 
 	srcIPv6, _ := netip.ParseAddr("::1")
 	srcPort := uint16(8022)
 	tcpFlags := tcpFlagNil | tcpRst
 
 	t.Run("must-allow-IPv6", func(t *testing.T) {
+		t.Parallel()
+
 		if !filters.AllowsIP(&srcIPv6) {
 			t.Fatalf("must allow IPv6: %s", srcIPv6.String())
 		}
 	})
 
 	t.Run("must-allow-TCP", func(t *testing.T) {
+		t.Parallel()
+
 		if !filters.AllowsTCP() {
 			t.Fatalf("must allow TCP")
 		}
 	})
 
 	t.Run("must-allow-TCP-port", func(t *testing.T) {
+		t.Parallel()
+
 		if !filters.AllowsL4Addr(&srcPort) {
 			t.Fatalf("must allow TCP port: %d", srcPort)
 		}
 	})
 
 	t.Run("must-allow-RST-TCP-flag", func(t *testing.T) {
+		t.Parallel()
+
 		if !filters.AllowsAnyTCPflags(&tcpFlags) {
 			t.Fatalf("must allow TCP flags: 0b%s",
 				strconv.FormatUint(uint64(tcpFlags), 2))
@@ -148,7 +172,7 @@ func TestAllowIPv6Filter(t *testing.T) {
 }
 
 func TestRejectIPv6Filter(t *testing.T) {
-	filters := newPcapFilters()
+	filters := newPcapFilters(t)
 
 	srcIPv6, _ := netip.ParseAddr("fddf:3978:feb1:d745::c001")
 	srcPort := uint16(52552)
@@ -157,6 +181,8 @@ func TestRejectIPv6Filter(t *testing.T) {
 	tcpFlags := tcpFlagNil | tcpAck
 
 	t.Run("must-reject-IPv6", func(t *testing.T) {
+		t.Parallel()
+
 		if filters.AllowsIP(&srcIPv6) {
 			t.Fatalf("must not allow: %s", srcIPv6.String())
 		}
@@ -167,12 +193,16 @@ func TestRejectIPv6Filter(t *testing.T) {
 	})
 
 	t.Run("must-allow-TCP", func(t *testing.T) {
+		t.Parallel()
+
 		if !filters.AllowsTCP() {
 			t.Fatalf("must allow TCP")
 		}
 	})
 
 	t.Run("must-reject-TCP-ports", func(t *testing.T) {
+		t.Parallel()
+
 		if filters.AllowsL4Addr(&srcPort) {
 			t.Fatalf("must not allow TCP ports: %d", srcPort)
 		}
@@ -183,6 +213,8 @@ func TestRejectIPv6Filter(t *testing.T) {
 	})
 
 	t.Run("must-reject-ACK-TCP-flag", func(t *testing.T) {
+		t.Parallel()
+
 		if filters.AllowsAnyTCPflags(&tcpFlags) {
 			t.Fatalf("must not allow TCP flag: 0b%s",
 				strconv.FormatUint(uint64(tcpFlags), 2))
@@ -196,6 +228,8 @@ func isTCPallowed(
 	tcpFlags uint8,
 	srcPort, dstPort uint16,
 ) bool {
+	t.Helper()
+
 	isProtosFilterAvailable := filters.HasL4Protos()
 	isTCPflagsFilterAvailable := filters.HasTCPflags()
 	isL4AddrsFilterAvailable := filters.HasL4Addrs()
@@ -223,4 +257,68 @@ func isTCPallowed(
 
 	return !isL4AddrsFilterAvailable ||
 		filters.AllowsAnyL4Addr(srcPort, dstPort)
+}
+
+func toBooleanAssertion(
+	t *testing.T,
+	b bool,
+) assert.BoolAssertionFunc {
+	t.Helper()
+	if b {
+		return assert.True
+	}
+	return assert.False
+}
+
+func TestAllowsIPaddres(
+	t *testing.T,
+) {
+	filters := newPcapFilters(t)
+	assertions := assert.New(t)
+
+	for _, tt := range []struct {
+		IP        string
+		assertion assert.BoolAssertionFunc
+		want      bool
+	}{
+		{
+			IP:   "173.194.206.95",
+			want: false,
+		},
+		{
+			IP:   "18.204.150.154",
+			want: false,
+		},
+		{
+			IP:   "192.168.0.1",
+			want: false,
+		},
+		{
+			IP:   "10.0.1.1",
+			want: true,
+		},
+		{
+			IP:   "169.254.8.1",
+			want: true,
+		},
+		{
+			IP:   "169.254.9.1",
+			want: true,
+		},
+		{
+			IP:   "169.254.169.254",
+			want: true,
+		},
+	} {
+		IP, err := netip.ParseAddr(tt.IP)
+		if assertions.NoError(err, sf.Format("invalid IP: {0}", tt.IP)) {
+			t.Run(sf.Format("verify-if-IP-{0}-is-allowed", tt.IP),
+				func(t *testing.T) {
+					t.Parallel()
+					assertion := toBooleanAssertion(t, tt.want)
+					got := filters.AllowsIP(&IP)
+					assertion(t, got, sf.Format("{0}\n{1}", tt.IP, cmp.Diff(tt.want, got)))
+				})
+		}
+	}
 }

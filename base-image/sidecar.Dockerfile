@@ -29,7 +29,7 @@ WORKDIR /app
 USER 0:0
 
 RUN apt-get -qq update  > /dev/null \
-    && apt-get -qq -y install ca-certificates tzdata curl jq fuse > /dev/null \
+    && apt-get -qq -y install ca-certificates tzdata fuse curl gawk jq iproute2 > /dev/null \
     && apt-get -qq clean > /dev/null
 
 COPY --from=base /dist/bin/ /usr/bin/

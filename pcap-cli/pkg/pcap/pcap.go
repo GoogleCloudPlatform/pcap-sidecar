@@ -61,6 +61,10 @@ type (
 		AddL4Protos(...L4Proto)
 		AddPort(uint16)
 		AddPorts(...uint16)
+		DenyPort(uint16)
+		DenyPorts(...uint16)
+		AllowPort(uint16)
+		AllowPorts(...uint16)
 		AddTCPFlags(...TCPFlag)
 		CombineAndAddTCPFlags(...TCPFlag)
 	}

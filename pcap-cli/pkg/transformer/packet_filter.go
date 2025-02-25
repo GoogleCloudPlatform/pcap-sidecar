@@ -15,7 +15,6 @@
 package transformer
 
 import (
-	"bytes"
 	"net/netip"
 
 	mapset "github.com/deckarep/golang-set/v2"
@@ -40,9 +39,10 @@ type (
 
 	pcapL4Filters struct {
 		// filter ports and flags in O(1)
-		ports  mapset.Set[uint16]
-		flags  uint8
-		protos mapset.Set[uint8]
+		ports   mapset.Set[uint16]
+		noPorts mapset.Set[uint16]
+		flags   uint8
+		protos  mapset.Set[uint8]
 	}
 
 	pcapFilters struct {
@@ -74,6 +74,8 @@ type (
 		AllowsUDP() bool
 		AllowsL4Addr(*uint16) bool
 		AllowsAnyL4Addr(...uint16) bool
+		DeniesAnyL4Addr(...uint16) bool
+
 		AllowsAnyTCPflags(*uint8) bool
 	}
 )
@@ -169,6 +171,26 @@ func (f *pcapFilters) AddPorts(ports ...uint16) {
 	}
 }
 
+func (f *pcapFilters) DenyPort(port uint16) {
+	f.l4.noPorts.Add(port)
+}
+
+func (f *pcapFilters) DenyPorts(ports ...uint16) {
+	for _, port := range ports {
+		f.DenyPort(port)
+	}
+}
+
+func (f *pcapFilters) AllowPort(port uint16) {
+	f.l4.noPorts.Remove(port)
+}
+
+func (f *pcapFilters) AllowPorts(ports ...uint16) {
+	for _, port := range ports {
+		f.AllowPort(port)
+	}
+}
+
 func (f *pcapFilters) AddTCPFlags(flags ...TCPFlag) {
 	for _, flag := range flags {
 		f.l4.flags |= flag.materialize()
@@ -225,11 +247,11 @@ func (f *pcapFilters) HasIPs() bool {
 }
 
 func (f *pcapFilters) AllowsL3Proto(proto *uint8) bool {
-	return f.l3.protos.Contains(*proto)
+	return f.l3.protos.ContainsOne(*proto)
 }
 
 func (f *pcapFilters) AllowsIPv4() bool {
-	return f.l3.protos.Contains(0x04)
+	return f.l3.protos.ContainsOne(0x04)
 }
 
 func (f *pcapFilters) AllowsIPv6() bool {
@@ -275,27 +297,31 @@ func (f *pcapFilters) HasL4Protos() bool {
 }
 
 func (f *pcapFilters) AllowsL4Proto(proto *uint8) bool {
-	return f.l4.protos.Contains(*proto)
+	return f.l4.protos.ContainsOne(*proto)
 }
 
 func (f *pcapFilters) AllowsTCP() bool {
-	return f.l4.protos.Contains(0x06)
+	return f.l4.protos.ContainsOne(0x06)
 }
 
 func (f *pcapFilters) AllowsUDP() bool {
-	return f.l4.protos.Contains(0x11)
+	return f.l4.protos.ContainsOne(0x11)
 }
 
 func (f *pcapFilters) HasL4Addrs() bool {
-	return !f.l4.ports.IsEmpty()
+	return !f.l4.ports.IsEmpty() || !f.l4.noPorts.IsEmpty()
 }
 
 func (f *pcapFilters) AllowsL4Addr(port *uint16) bool {
-	return f.l4.ports.Contains(*port)
+	return !f.l4.noPorts.ContainsOne(*port) && (f.l4.ports.IsEmpty() || f.l4.ports.ContainsOne(*port))
 }
 
 func (f *pcapFilters) AllowsAnyL4Addr(ports ...uint16) bool {
-	return f.l4.ports.ContainsAny(ports...)
+	return !f.DeniesAnyL4Addr(ports...) && (f.l4.ports.IsEmpty() || f.l4.ports.ContainsAny(ports...))
+}
+
+func (f *pcapFilters) DeniesAnyL4Addr(ports ...uint16) bool {
+	return !f.l4.noPorts.IsEmpty() && f.l4.noPorts.ContainsAny(ports...)
 }
 
 func (f *pcapFilters) HasTCPflags() bool {
@@ -310,7 +336,7 @@ func ipLessThanFunc(a, b netip.Prefix) bool {
 	if a.Overlaps(b) {
 		return false
 	}
-	return bytes.Compare(a.Addr().AsSlice(), b.Addr().AsSlice()) < 0
+	return a.Addr().Less(b.Addr())
 }
 
 func NewPcapFilters() *pcapFilters {
@@ -321,9 +347,10 @@ func NewPcapFilters() *pcapFilters {
 			protos:    mapset.NewSet[uint8](),
 		},
 		l4: &pcapL4Filters{
-			ports:  mapset.NewSet[uint16](),
-			flags:  uint8(tcpFlagNil),
-			protos: mapset.NewSet[uint8](),
+			ports:   mapset.NewSet[uint16](),
+			noPorts: mapset.NewSet[uint16](),
+			flags:   uint8(tcpFlagNil),
+			protos:  mapset.NewSet[uint8](),
 		},
 	}
 }

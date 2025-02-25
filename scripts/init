@@ -59,6 +59,10 @@ PCAP_SECS=${PCAP_ROTATE_SECS:-60}
 # for Cloud Run gen1 snapshot length cannot be 0
 PCAP_SNAPLEN=${PCAP_SNAPSHOT_LENGTH:-65536}
 
+echo "PCAP_DEBUG=${PCAP_DEBUG:-false}" >> ${ENV_FILE}
+
+echo "PCAP_SUPERVISOR_PORT=${PCAP_SUPERVISOR_PORT:-23456}" >> ${ENV_FILE}
+
 echo "PCAP_COMPAT=${PCAP_COMPAT:-false}" >> ${ENV_FILE}
 echo "PCAP_EXEC_ENV=${PCAP_EXEC_ENV}" >> ${ENV_FILE}
 echo "PROJECT_ID=${GOOGLE_CLOUD_PROJECT}" >> ${ENV_FILE}
@@ -113,8 +117,6 @@ echo "PCAP_HOSTS=${PCAP_HOSTS:-ALL}" >> ${ENV_FILE}
 echo "PCAP_PORTS=${PCAP_PORTS:-ALL}" >> ${ENV_FILE}
 # simple filter; comma separated list of lowercase TCP flags that a segment must contain to be captured
 echo "PCAP_TCP_FLAGS=${PCAP_TCP_FLAGS:-ALL}" >> ${ENV_FILE}
-
-echo "PCAP_RT_ENV=@PCAP_RT_ENV@" >> ${ENV_FILE}
 
 # Create both paths to store PCAP files
 mkdir -pv ${PCAP_MNT}

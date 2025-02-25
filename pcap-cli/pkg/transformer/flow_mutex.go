@@ -155,7 +155,7 @@ func (fm *flowMutex) log(
 	labels.Set(logName, "run.googleapis.com/pcap/name")
 
 	operation, _ := json.Object("logging.googleapis.com/operation")
-	operation.Set(logName, "producer")
+	operation.Set(stringFormatter.Format("{0}/debug", logName), "producer")
 	operation.Set(stringFormatter.Format("{0}/flow/{1}/debug", id, flowIDstr), "id")
 
 	json.Set(stringFormatter.Format("#:{0} | flow:{1} | {2}", serialStr, flowIDstr, *message), "message")

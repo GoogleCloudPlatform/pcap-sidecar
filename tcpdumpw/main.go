@@ -76,6 +76,12 @@ var (
 	ephemerals = flag.String("ephemerals", "32768,65535", "range of ephemeral ports")
 	compat     = flag.Bool("compat", false, "apply filters in Cloud Run gen1 mode")
 	rt_env     = flag.String("rt_env", "cloud_run_gen2", "runtime where PCAP sidecar is used")
+
+	supervisor = flag.String("supervisor", "http://127.0.0.1:23456", "supervisord 'serverurl'")
+
+	no_procs          = flag.String("no_procs", "gcsfuse", "process for which TCP sockets should be excluded")
+	no_procs_interval = flag.Uint("no_procs_interval", 15, "how often to reresh sockets owned by pcap-sidecar's processes")
+	no_procs_debug    = flag.Bool("no_procs_debug", false, "enable/disable logging of socket discovery for pcap-sidecar's processes")
 )
 
 type (
@@ -152,6 +158,11 @@ const (
 const (
 	anyIfaceName  string = "any"
 	anyIfaceIndex int    = int(0)
+)
+
+const (
+	defaultNoProcsInterval = uint(15)  // 15 seconds
+	maxNoProcsInterval     = uint(240) // 4 minutes
 )
 
 func jlog(severity jLogLevel, job *tcpdumpJob, message string) {
@@ -609,6 +620,14 @@ func main() {
 			*filter = string(pcap.PcapDefaultFilter)
 		}
 	}
+
+	noProcsInterval := *no_procs_interval
+	if noProcsInterval > maxNoProcsInterval {
+		noProcsInterval = maxNoProcsInterval
+	}
+	processFilter := pcapFilter.NewProcessFilterProvider(supervisor, no_procs, uint8(noProcsInterval), *no_procs_debug, compatFilters)
+	// initialize `ProcessFilterProvider` for its side effects
+	filters = append(filters, processFilter.Initialize(ctx))
 
 	ephemeralPortRange := parseEphemeralPorts(ephemerals)
 
