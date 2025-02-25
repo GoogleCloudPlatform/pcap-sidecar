@@ -144,12 +144,12 @@ var (
 		) fmt.Stringer {
 			return w.translateICMPv6RedirectLayer(ctx, deep)
 		},
-		layers.LayerTypeARP: func(
+		gopacket.LayerTypeDecodeFailure: func(
 			ctx context.Context,
 			w *pcapTranslatorWorker,
 			deep bool,
 		) fmt.Stringer {
-			return w.translateARPLayer(ctx, deep)
+			return w.translateErrorLayer(ctx, deep)
 		},
 	}
 
@@ -228,6 +228,9 @@ func (w *pcapTranslatorWorker) translateLayer(
 		return w.translator.translateDNSLayer(ctx, lType)
 	case *layers.TLS:
 		return w.translator.translateTLSLayer(ctx, lType)
+	case *gopacket.DecodeFailure:
+		// see: https://github.com/google/gopacket/blob/v1.1.19/decode.go#L118-L126
+		return w.translator.translateErrorLayer(ctx, lType)
 	}
 }
 
@@ -295,6 +298,10 @@ func (w *pcapTranslatorWorker) translateTLSLayer(ctx context.Context, deep bool)
 	*/
 
 	return w.translateLayer(ctx, layers.LayerTypeTLS, deep)
+}
+
+func (w *pcapTranslatorWorker) translateErrorLayer(ctx context.Context, deep bool) fmt.Stringer {
+	return w.translateLayer(ctx, gopacket.LayerTypeDecodeFailure, deep)
 }
 
 func (w *pcapTranslatorWorker) isIPv4Allowed(
@@ -436,20 +443,19 @@ func (w *pcapTranslatorWorker) translate(
 	wg *sync.WaitGroup,
 ) {
 	layerType := layer.LayerType()
-	layerTypeStr := layerType.String()
 
 	defer func(index int, layer gopacket.Layer, wg *sync.WaitGroup) {
 		if r := recover(); r != nil {
-			transformerLogger.Printf("%s @%s[%d] | panic: %s\n%s\n",
-				*w.loggerPrefix, layerTypeStr, index, r, string(debug.Stack()))
+			translations <- w.translator.translateLayerError(ctx,
+				layerType, fmt.Errorf("%v: %s", r, string(debug.Stack())))
 		}
 		wg.Done()
 	}(index, layer, wg)
 
 	if translator, ok := packetLayerTranslatorsMap[layerType]; ok {
 		if t := translator(ctx, w, false /* deep */); t == nil {
-			transformerLogger.Printf("%s @translator[%d][%s] | unavailable",
-				*w.loggerPrefix, index, layerTypeStr)
+			translations <- w.translator.translateLayerError(ctx,
+				layerType, fmt.Errorf("unavailable@%d", index))
 		} else {
 			translations <- t
 		}
@@ -458,13 +464,10 @@ func (w *pcapTranslatorWorker) translate(
 
 	// translator does not have an implementation to handle this layer type
 	switch layer.(type) {
-	case *gopacket.DecodeFailure:
-		err := layer.(*gopacket.DecodeFailure)
-		transformerLogger.Printf("%s error@layer[%d]: %s", *w.loggerPrefix, index, err.Error())
 	default:
 		if !skippedLayers.Contains(layerType) {
-			transformerLogger.Printf("%s @translator[%d|layer:%s] | not found",
-				*w.loggerPrefix, index, layerTypeStr)
+			translations <- w.translator.translateLayerError(ctx,
+				layerType, fmt.Errorf("unimplemented@%d", index))
 		}
 	}
 }
@@ -529,6 +532,7 @@ func (w *pcapTranslatorWorker) Run(ctx context.Context) (buffer interface{}) {
 	for translation := range translations {
 		// translations are `nil` if layer is not available
 		if translation != nil {
+			// see: https://github.com/Jeffail/gabs?tab=readme-ov-file#merge-two-containers
 			_buffer, _ = w.translator.merge(ctx, _buffer, translation)
 		}
 	}

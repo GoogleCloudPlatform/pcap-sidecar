@@ -151,6 +151,50 @@ func (t *JSONPcapTranslator) asTranslation(buffer fmt.Stringer) *gabs.Container 
 	return buffer.(*gabs.Container)
 }
 
+func newError(
+	ctx context.Context,
+	err error,
+) (fmt.Stringer, *gabs.Container) {
+	json := gabs.New()
+
+	errors, _ := json.ArrayOfSize(1, "err")
+
+	errJSON, _ := errors.ObjectI(0)
+	errJSON.Set(err.Error(), "msg")
+
+	json.Set("severity", "ERROR")
+
+	// return only the error for caller to hydrate.
+	return json, errJSON
+}
+
+func (t *JSONPcapTranslator) translateErrorLayer(
+	ctx context.Context,
+	err *gopacket.DecodeFailure,
+) fmt.Stringer {
+	json, errJSON := newError(ctx, err.Error())
+	errJSON.Set(err.Dump(), "trace")
+	return json
+}
+
+func (t *JSONPcapTranslator) translateLayerError(
+	ctx context.Context,
+	lType gopacket.LayerType,
+	err error,
+) fmt.Stringer {
+	json, errJSON := newError(ctx, err)
+	errJSON.Set(lType.String(), "layer")
+	return json
+}
+
+func (t *JSONPcapTranslator) translateError(
+	ctx context.Context,
+	err error,
+) fmt.Stringer {
+	json, _ := newError(ctx, err)
+	return json
+}
+
 func (t *JSONPcapTranslator) translateEthernetLayer(ctx context.Context, eth *layers.Ethernet) fmt.Stringer {
 	json := gabs.New()
 

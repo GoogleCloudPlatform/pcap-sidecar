@@ -45,6 +45,8 @@ type (
 
 	PcapTranslator interface {
 		next(context.Context, *PcapIface, *uint64, *gopacket.Packet) fmt.Stringer
+		translateError(context.Context, error) fmt.Stringer
+		translateLayerError(context.Context, gopacket.LayerType, error) fmt.Stringer
 		translateEthernetLayer(context.Context, *layers.Ethernet) fmt.Stringer
 		translateARPLayer(context.Context, *layers.ARP) fmt.Stringer
 		translateIPv4Layer(context.Context, *layers.IPv4) fmt.Stringer
@@ -58,6 +60,7 @@ type (
 		translateTCPLayer(context.Context, *layers.TCP) fmt.Stringer
 		translateTLSLayer(context.Context, *layers.TLS) fmt.Stringer
 		translateDNSLayer(context.Context, *layers.DNS) fmt.Stringer
+		translateErrorLayer(context.Context, *gopacket.DecodeFailure) fmt.Stringer
 		merge(context.Context, fmt.Stringer, fmt.Stringer) (fmt.Stringer, error)
 		finalize(context.Context, netIfaceIndex, *PcapIface, *uint64, *gopacket.Packet, bool, fmt.Stringer) (fmt.Stringer, error)
 		write(context.Context, io.Writer, *fmt.Stringer) (int, error)

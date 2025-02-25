@@ -34,3 +34,4 @@ docker_build_profile
 
 # Go workspace file
 go.work
+go.work.sum
