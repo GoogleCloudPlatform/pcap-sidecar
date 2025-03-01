@@ -1664,7 +1664,7 @@ func newJSONPcapTranslator(
 	iface *PcapIface,
 	ephemerals *PcapEmphemeralPorts,
 ) PcapTranslator {
-	flowToStreamToSequenceMap := haxmap.New[uint64, FTSM]()
+	flowToStreamToSequenceMap := haxmap.New[uint64, STSM]()
 	traceToHttpRequestMap := haxmap.New[string, *httpRequest]()
 	flowMutex := newFlowMutex(ctx, debug, flowToStreamToSequenceMap, traceToHttpRequestMap)
 

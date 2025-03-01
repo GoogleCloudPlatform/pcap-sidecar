@@ -273,7 +273,6 @@ func toBooleanAssertion(
 func TestAllowsIPaddres(
 	t *testing.T,
 ) {
-	filters := newPcapFilters(t)
 	assertions := assert.New(t)
 
 	for _, tt := range []struct {
@@ -315,10 +314,103 @@ func TestAllowsIPaddres(
 			t.Run(sf.Format("verify-if-IP-{0}-is-allowed", tt.IP),
 				func(t *testing.T) {
 					t.Parallel()
+					filters := newPcapFilters(t)
 					assertion := toBooleanAssertion(t, tt.want)
 					got := filters.AllowsIP(&IP)
 					assertion(t, got, sf.Format("{0}\n{1}", tt.IP, cmp.Diff(tt.want, got)))
 				})
 		}
+	}
+}
+
+func TestHashSocket(
+	t *testing.T,
+) {
+	f := NewPcapFilters()
+
+	for _, tt := range []struct {
+		name       string
+		ipAndPort1 string
+		ipAndPort2 string
+	}{
+		{
+			name:       "IPv4",
+			ipAndPort1: "127.0.0.1:55555",
+			ipAndPort2: "10.10.10.10:443",
+		},
+		{
+			name:       "IPv6",
+			ipAndPort1: "[::1]:55555",
+			ipAndPort2: "[2607:f8b0:4001:c08::cf]:443",
+		},
+	} {
+		t.Run("2tuple", func(t *testing.T) {
+			t.Parallel()
+			a := assert.New(t)
+
+			hash, hashOK := f.hashSocketFrom2tuples(tt.ipAndPort1, tt.ipAndPort2)
+			reversedHash, reversedHashOK := f.hashSocketFrom2tuples(tt.ipAndPort2, tt.ipAndPort1)
+
+			a.True(hashOK, sf.Format("{0} > {1}", tt.ipAndPort1, tt.ipAndPort2))
+			a.True(reversedHashOK, sf.Format("{0} > {1}", tt.ipAndPort2, tt.ipAndPort1))
+
+			t.Log(sf.Format("hash2tuples({0} > {1})={2}", tt.ipAndPort1, tt.ipAndPort2, *hash))
+			t.Log(sf.Format("hash2tuples({0} > {1})={2}", tt.ipAndPort2, tt.ipAndPort1, *reversedHash))
+
+			a.Equal(hash, reversedHash, sf.Format("hash 2tuples: {0}", cmp.Diff(*hash, *reversedHash)))
+
+			addrPort1, addrPortErr1 := netip.ParseAddrPort(tt.ipAndPort1)
+			addrPort2, addrPortErr2 := netip.ParseAddrPort(tt.ipAndPort2)
+
+			if a.NoError(addrPortErr1) && a.NoError(addrPortErr2) {
+				t.Run("AddrPort", func(t *testing.T) {
+					t.Parallel()
+					a := assert.New(t)
+
+					addr1 := addrPort1.Addr()
+					port1 := addrPort1.Port()
+
+					addr2 := addrPort2.Addr()
+					port2 := addrPort2.Port()
+
+					hashAddrPort := f.hashSocketFromAddrsAndPorts(&addr1, &port1, &addr2, &port2)
+					reversedAddrPortHash := f.hashSocketFromAddrsAndPorts(&addr2, &port2, &addr1, &port1)
+
+					t.Log(sf.Format("hashAddrPort({0} > {1})={2}", addrPort1.String(), addrPort2.String(), *hashAddrPort))
+					t.Log(sf.Format("hashAddrPort({0} > {1})={2}", addrPort2.String(), addrPort1.String(), *reversedAddrPortHash))
+
+					a.Equal(hashAddrPort, reversedAddrPortHash, sf.Format("hash AddrPorts: {0}", cmp.Diff(*hash, *reversedHash)))
+
+					t.Run("crosscheck", func(t *testing.T) {
+						t.Parallel()
+						a := assert.New(t)
+
+						a.Equal(hash, hashAddrPort, sf.Format("hash: {0}", cmp.Diff(*hash, *reversedAddrPortHash)))
+						a.Equal(reversedHash, reversedAddrPortHash, sf.Format("reversed hash: {0}", cmp.Diff(*hash, *reversedAddrPortHash)))
+						a.Equal(hash, reversedAddrPortHash, sf.Format("hash: {0}", cmp.Diff(*hash, *reversedAddrPortHash)))
+						a.Equal(hashAddrPort, reversedHash, sf.Format("reversed hash: {0}", cmp.Diff(*hashAddrPort, *reversedHash)))
+					})
+				})
+			}
+
+			t.Run("API", func(t *testing.T) {
+				t.Parallel()
+
+				a.True(f.DenySocket(tt.ipAndPort1, tt.ipAndPort2),
+					sf.Format("failed to deny socket: [local={0} > remote={1}]", tt.ipAndPort1, tt.ipAndPort2))
+
+				addr1 := addrPort1.Addr()
+				port1 := addrPort1.Port()
+
+				addr2 := addrPort2.Addr()
+				port2 := addrPort2.Port()
+
+				a.False(f.AllowsSocket(&addr1, &port1, &addr2, &port2),
+					sf.Format("must deny socket: [{0} > {1}]", addrPort1.String(), addrPort2.String()))
+
+				a.False(f.AllowsSocket(&addr2, &port2, &addr1, &port1),
+					sf.Format("must deny reversed socket: [{0} > {1}]", addrPort1.String(), addrPort2.String()))
+			})
+		})
 	}
 }

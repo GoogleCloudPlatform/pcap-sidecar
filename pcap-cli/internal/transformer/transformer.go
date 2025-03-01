@@ -120,6 +120,7 @@ type (
 const (
 	ContextID      = ContextKey("id")
 	ContextLogName = ContextKey("logName")
+	ContextDebug   = ContextKey("debug")
 )
 
 //go:generate stringer -type=PcapTranslatorFmt
