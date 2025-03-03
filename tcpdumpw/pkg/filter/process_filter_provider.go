@@ -41,7 +41,7 @@ type (
 	}
 
 	tcpSocket struct {
-		Proto      string `json:"f"`
+		Protocol   string `json:"f"`
 		LocalAddr  string `json:"l"`
 		RemoteAddr string `json:"r"`
 		Program    string `json:"p"`
@@ -254,7 +254,7 @@ func (p *ProcessFilterProvider) newProcessKey(
 	name string,
 	id int,
 ) string {
-	return sf.Format("{0}/{1}", name, id)
+	return sf.Format("{0}:{1}", name, id)
 }
 
 func (p *ProcessFilterProvider) isProcessKey(
@@ -269,7 +269,22 @@ func (p *ProcessFilterProvider) newSocketKey(
 	process *processInfo,
 	socket *tcpSocket,
 ) string {
-	return sf.Format("{0}/{1}", *process.key, socket.LocalAddr)
+	return sf.Format("{0}/{1}/{2}/{3}", *process.key,
+		socket.Protocol, socket.LocalAddr, socket.RemoteAddr)
+}
+
+func (p *ProcessFilterProvider) toSocket(
+	process *processInfo,
+	socketKey *string,
+) *tcpSocket {
+	parts := strings.SplitN(*socketKey, "/", 4)
+	return &tcpSocket{
+		Protocol:   parts[1],
+		LocalAddr:  parts[2],
+		RemoteAddr: parts[3],
+		Program:    *process.name,
+		PID:        process.id,
+	}
 }
 
 func (p *ProcessFilterProvider) applyFilter(
@@ -284,35 +299,23 @@ func (p *ProcessFilterProvider) applyFilter(
 	var socket *tcpSocket
 	found := false
 	if socket, found = sockets[*socketKey]; !found {
-		err := fmt.Errorf("not found: %s", *socketKey)
-		p.logProcessFilterError(process, err)
-		return err
+		// handle case when a socket is closed:
+		//   - `sockets` map only contains sockets in state: 'ESTABLISHED'.
+		//   - `socketKey` contains all information to create a `tcpSocket`.
+		socket = p.toSocket(process, socketKey)
 	}
 
-	port := p.parsePort(socket.LocalAddr)
-
-	if port == 0 {
-		err := fmt.Errorf("invalid port: %d", port)
-		p.logSocketFilterRejected(socket, err)
-		return err
-	}
-
-	// TODO: PR#22: update IP+TCP 2-tuples to be excluded
-	// filtering just on the port is not very effective, so:
-	//   - update `pcap-cli` to accept TCP 2-tuples
-	// ---
 	// `pcap.PcapFilters` is backed by a thread-safe Set:
-	//   - it is safe to update denied ports concurrenly.
+	//   - it is safe to update allowed/denied sockets concurrenly.
 	if allowed {
-		p.AllowPort(port)
-		p.sockets.Remove(*socketKey)
-	} else {
-		p.DenyPort(port)
+		if p.AllowSocket(socket.LocalAddr, socket.RemoteAddr) {
+			p.sockets.Remove(*socketKey)
+		}
+	} else if p.DenySocket(socket.LocalAddr, socket.RemoteAddr) {
 		p.sockets.Add(*socketKey)
 	}
 
-	p.logSocketFilterApplied(socket,
-		sf.Format(socketFilteredByLocalPort, allowed, port))
+	p.logSocketFilterApplied(socket, sf.Format(socketFiltered, allowed))
 
 	return nil
 }

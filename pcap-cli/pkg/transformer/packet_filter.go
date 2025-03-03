@@ -19,6 +19,7 @@ import (
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/btree"
+	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/wissance/stringFormatter"
 )
 
@@ -46,8 +47,9 @@ type (
 	}
 
 	pcapFilters struct {
-		l3 *pcapL3Filters
-		l4 *pcapL4Filters
+		l3        *pcapL3Filters
+		l4        *pcapL4Filters
+		noSockets mapset.Set[uint64]
 	}
 
 	PcapFilters interface {
@@ -76,9 +78,75 @@ type (
 		AllowsAnyL4Addr(...uint16) bool
 		DeniesAnyL4Addr(...uint16) bool
 
+		AllowsSocket(*netip.Addr, *uint16, *netip.Addr, *uint16) bool
+		DeniesSocket(*netip.Addr, *uint16, *netip.Addr, *uint16) bool
+
 		AllowsAnyTCPflags(*uint8) bool
 	}
+
+	Addr netip.Addr
 )
+
+func (f *pcapFilters) hashAddrAndPort(
+	addr *netip.Addr,
+	port *uint16,
+) *uint64 {
+	hash := fnv1a.HashBytes64(addr.AsSlice())
+	hash += uint64(*port)
+	return &hash
+}
+
+func (f *pcapFilters) hashAddrPort(
+	addrPort *netip.AddrPort,
+) *uint64 {
+	addr := addrPort.Addr()
+	port := addrPort.Port()
+	return f.hashAddrAndPort(&addr, &port)
+}
+
+func (f *pcapFilters) hash2tuple(
+	ipAndPort string,
+) (*uint64, bool) {
+	addrPort, err := netip.ParseAddrPort(ipAndPort)
+	if err != nil {
+		return nil, false
+	}
+	return f.hashAddrPort(&addrPort), true
+}
+
+func (f *pcapFilters) hashUint64s(
+	hashes ...*uint64,
+) *uint64 {
+	hash := uint64(0)
+	for _, h := range hashes {
+		// addition is commutative:
+		//   - no matter the order of the inputs:
+		//     - this function always returns the same hash.
+		hash += *h
+	}
+	hash = fnv1a.HashUint64(hash)
+	return &hash
+}
+
+func (f *pcapFilters) hashSocketFrom2tuples(
+	local string, remote string,
+) (*uint64, bool) {
+	localHash, localOK := f.hash2tuple(local)
+	remoteHash, remoteOK := f.hash2tuple(remote)
+	if !localOK || !remoteOK {
+		return nil, false
+	}
+	return f.hashUint64s(localHash, remoteHash), true
+}
+
+func (f *pcapFilters) hashSocketFromAddrsAndPorts(
+	srcAddr *netip.Addr, srcPort *uint16,
+	dstAddr *netip.Addr, dstPort *uint16,
+) *uint64 {
+	srcHash := f.hashAddrAndPort(srcAddr, srcPort)
+	dstHash := f.hashAddrAndPort(dstAddr, dstPort)
+	return f.hashUint64s(srcHash, dstHash)
+}
 
 func (flag *TCPFlag) materialize() uint8 {
 	_flag := string(*flag)
@@ -86,10 +154,6 @@ func (flag *TCPFlag) materialize() uint8 {
 		return f
 	}
 	return uint8(tcpFlagNil)
-}
-
-func (flag *TCPFlag) ToUint8() uint8 {
-	return flag.materialize()
 }
 
 func mergeTCPFlags(flags ...TCPFlag) uint8 {
@@ -119,6 +183,12 @@ func (f *pcapFilters) addNetworks(
 	for _, ipRange := range ipRanges {
 		f.addNetwork(networks, isIPv6, ipRange)
 	}
+}
+
+/* methods for filter's users */
+
+func (flag *TCPFlag) ToUint8() uint8 {
+	return flag.materialize()
 }
 
 func (f *pcapFilters) AddIPv4(IPv4 string) {
@@ -230,6 +300,37 @@ func (f *pcapFilters) AddL4Protos(protos ...L4Proto) {
 	}
 }
 
+func (f *pcapFilters) updateNoSockets(
+	local string,
+	remote string,
+	allowed bool,
+) bool {
+	if hash, ok := f.hashSocketFrom2tuples(local, remote); ok {
+		if allowed {
+			f.noSockets.Remove(*hash)
+		} else {
+			f.noSockets.Add(*hash)
+		}
+		return ok
+	}
+	return false
+}
+
+func (f *pcapFilters) AllowSocket(
+	local string, remote string,
+) bool {
+	return f.updateNoSockets(local, remote, true /* allowed */)
+}
+
+func (f *pcapFilters) DenySocket(
+	local string, remote string,
+) bool {
+	return f.updateNoSockets(local, remote, false /* allowed */)
+}
+
+/* methods for fulter's consumers */
+/* methods to check if a packet is allowed */
+
 func (f *pcapFilters) HasL3Protos() bool {
 	return !f.l3.protos.IsEmpty()
 }
@@ -332,6 +433,21 @@ func (f *pcapFilters) AllowsAnyTCPflags(flags *uint8) bool {
 	return (*flags & f.l4.flags) > tcpFlagNil
 }
 
+func (f *pcapFilters) DeniesSocket(
+	srcAddr *netip.Addr, srcPort *uint16,
+	dstAddr *netip.Addr, dstPort *uint16,
+) bool {
+	hash := f.hashSocketFromAddrsAndPorts(srcAddr, srcPort, dstAddr, dstPort)
+	return !f.noSockets.IsEmpty() && f.noSockets.ContainsOne(*hash)
+}
+
+func (f *pcapFilters) AllowsSocket(
+	srcAddr *netip.Addr, srcPort *uint16,
+	dstAddr *netip.Addr, dstPort *uint16,
+) bool {
+	return !f.DeniesSocket(srcAddr, srcPort, dstAddr, dstPort)
+}
+
 func ipLessThanFunc(a, b netip.Prefix) bool {
 	if a.Overlaps(b) {
 		return false
@@ -352,5 +468,6 @@ func NewPcapFilters() *pcapFilters {
 			flags:   uint8(tcpFlagNil),
 			protos:  mapset.NewSet[uint8](),
 		},
+		noSockets: mapset.NewSet[uint64](),
 	}
 }

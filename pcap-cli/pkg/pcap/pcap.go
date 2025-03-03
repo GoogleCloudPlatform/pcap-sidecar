@@ -59,6 +59,8 @@ type (
 		AddIPv6Ranges(...string)
 		AddL4Proto(L4Proto)
 		AddL4Protos(...L4Proto)
+		AllowSocket(string, string) bool
+		DenySocket(string, string) bool
 		AddPort(uint16)
 		AddPorts(...uint16)
 		DenyPort(uint16)

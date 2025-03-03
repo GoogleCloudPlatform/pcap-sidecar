@@ -15,23 +15,29 @@
 #   - JSON lines: objects separated by line breaks
 #   - JSON structure:  
 #     {
-#       f: <String> | Protocol: tcp or tcp6
-#       l: <String> | LocalAddress: IP+TCP 2-tuple separated by ':'
-#       r: <String> | RemoteAddress: IP+TCP 2-tuple separated by ':'
-#       p: <String> | Program: process name
-#       i: <String> | ProcessID: process ID aka 'pid'
+#       f: <String>  | Protocol: tcp or tcp6
+#       l: <String>  | LocalAddress: IP+TCP 2-tuple separated by ':'
+#       r: <String>  | RemoteAddress: IP+TCP 2-tuple separated by ':'
+#       p: <String>  | Program: process name
+#       i: <Integer> | Process ID: process ID aka 'pid'
+#       d: <Integer> | File Descriptor: socket file descriptor aka 'fd'
 #     }
 ###################################################################################################
 
-ss -tulpanHO 2>/dev/null | grep -iE '^tcp.*' \
-  | gawk '{ \
-    match($7, /.*:\((\("[^"]+",pid=[0-9]+,fd=[0-9]+\),?)+\)/, p); \
-    split(substr(p[0], 9, length(p[0])-10), p, "\\),\\("); \
-    for (i in p) { \
-      split(p[i], px, ","); \
-      split(px[2], pid, "="); \
-      split(px[3], fd, "="); \
-      printf("{\"f\":\"%s\",\"l\":\"%s\",\"r\":\"%s\",\"s\":\"%s\",\"p\":%s,\"i\":%d,\"d\":%d}\n",$1,$5,$6,$2,px[1],pid[2],fd[2]); \
-    } \
-  }' \
-  | jq -cMr "select ((.s == \"${3:-ESTAB}\") and ((.p == \"${1}\") or (.i == ${2}))) | del (.s)"
+ss -tulpanHO 2>/dev/null \
+  | gawk \
+    -v SOCKET_STATE="${3:-ESTAB}" \
+    -v PROCESS_NAME="\"${1}\"" \
+    -v PROCESS_ID="${2}" \
+      '$1 ~ /^tcp/ && $2 == SOCKET_STATE { \
+        match($7, /.*:\((\("[^"]+",pid=[0-9]+,fd=[0-9]+\),?)+\)/, p); \
+        split(substr(p[0], 9, length(p[0])-10), p, "\\),\\("); \
+        for (i in p) { \
+          split(p[i], px, ","); \
+          split(px[2], pid, "="); \
+          split(px[3], fd, "="); \
+          if ( px[1] == PROCESS_NAME || pid[2] == PROCESS_ID ) { \
+            printf("{\"f\":\"%s\",\"l\":\"%s\",\"r\":\"%s\",\"p\":%s,\"i\":%d,\"d\":%d}\n",$1,$5,$6,px[1],pid[2],fd[2]); \
+          } \
+        } \
+      }'
