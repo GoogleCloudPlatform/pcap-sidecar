@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/alphadose/haxmap"
+	"github.com/avast/retry-go/v4"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gofrs/flock"
 	"go.uber.org/zap"
@@ -71,14 +72,16 @@ const (
 )
 
 var (
-	src_dir    = flag.String("src_dir", "/pcap-tmp", "pcaps source directory")
-	gcs_dir    = flag.String("gcs_dir", "/pcap", "pcaps destination directory")
-	pcap_ext   = flag.String("pcap_ext", "pcap", "pcap files extension")
-	gzip_pcaps = flag.Bool("gzip", false, "compress pcap files")
-	gcp_gae    = flag.Bool("gae", false, "define serverless execution environment")
-	interval   = flag.Uint("interval", 60, "seconds after which tcpdump rotates PCAP files")
-	compat     = flag.Bool("compat", false, "apply filters in Cloud Run gen1 mode")
-	rt_env     = flag.String("rt_env", "cloud_run_gen2", "runtime where PCAP sidecar is used")
+	src_dir       = flag.String("src_dir", "/pcap-tmp", "pcaps source directory")
+	gcs_dir       = flag.String("gcs_dir", "/pcap", "pcaps destination directory")
+	pcap_ext      = flag.String("pcap_ext", "pcap", "pcap files extension")
+	gzip_pcaps    = flag.Bool("gzip", false, "compress pcap files")
+	gcp_gae       = flag.Bool("gae", false, "define serverless execution environment")
+	interval      = flag.Uint("interval", 60, "seconds after which tcpdump rotates PCAP files")
+	retries_max   = flag.Uint("retries_max", 5, "times a failed copy-to-GCS operation should be retried")
+	retries_delay = flag.Uint("retries_delay", 2, "seconds between retries for copy-to-GCS operations")
+	compat        = flag.Bool("compat", false, "apply filters in Cloud Run gen1 mode")
+	rt_env        = flag.String("rt_env", "cloud_run_gen2", "runtime where PCAP sidecar is used")
 )
 
 var (
@@ -115,7 +118,13 @@ var (
 
 var isActive atomic.Bool
 
-func logEvent(level zapcore.Level, message string, event pcapEvent, data map[string]interface{}, err error) {
+func logEvent(
+	level zapcore.Level,
+	message string,
+	event pcapEvent,
+	data map[string]interface{},
+	err error,
+) {
 	now := time.Now()
 	_data := map[string]interface{}{
 		"event": event,
@@ -141,7 +150,12 @@ func logFsEvent(level zapcore.Level, message string, event pcapEvent, src, tgt s
 	logEvent(level, message, event, data, err)
 }
 
-func movePcapToGcs(srcPcap *string, dstDir *string, compress, delete bool) (*string, *int64, error) {
+func movePcapToGcs(
+	ctx context.Context,
+	srcPcap *string,
+	dstDir *string,
+	compress, delete bool,
+) (*string, *int64, error) {
 	// Define name of destination PCAP file, prefixed by its ordinal and destination directory
 	pcapName := filepath.Base(*srcPcap)
 	tgtPcap := filepath.Join(*dstDir, pcapName)
@@ -172,32 +186,47 @@ func movePcapToGcs(srcPcap *string, dstDir *string, compress, delete bool) (*str
 	}
 	// logFsEvent(zapcore.InfoLevel, fmt.Sprintf("CREATED: %s", tgtPcap), PCAP_EXPORT, *srcPcap, tgtPcap, 0)
 
-	// Copy source PCAP into destination PCAP, compressing destination PCAP is optional
-	if compress {
-		gzipPcap := gzip.NewWriter(outputPcap)
-		pcapBytes, err = io.Copy(gzipPcap, inputPcap)
-		gzipPcap.Flush()
-		gzipPcap.Close() // this is still required; `Close()` on parent `Writer` does not trigger `Close()` at `gzip`
-	} else {
-		pcapBytes, err = io.Copy(outputPcap, inputPcap)
-	}
+	pcapBytes, err = retry.DoWithData(func() (int64, error) {
+		// Copy source PCAP into destination PCAP, compressing destination PCAP is optional
+		if compress {
+			gzipPcap := gzip.NewWriter(outputPcap)
+			defer gzipPcap.Close() // this is still required; `Close()` on parent `Writer` does not trigger `Close()` at `gzip`
+			defer gzipPcap.Flush()
+			return io.Copy(gzipPcap, inputPcap)
+		} else {
+			return io.Copy(outputPcap, inputPcap)
+		}
+	},
+		retry.Context(ctx),
+		retry.Attempts(*retries_max),
+		retry.Delay(time.Duration(*retries_delay)*time.Second),
+		retry.DelayType(retry.FixedDelay),
+		retry.OnRetry(func(n uint, err error) {
+			logFsEvent(zapcore.WarnLevel,
+				fmt.Sprintf("failed to COPY file at attempt %d: %v", n+1, *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, 0, err)
+		}))
 
 	inputPcap.Close()
 	outputPcap.Close()
 
 	if err != nil {
-		logFsEvent(zapcore.ErrorLevel, fmt.Sprintf("failed to COPY file: %s", *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, 0, err)
-		return &tgtPcap, &pcapBytes, fmt.Errorf("failed to copy '%s' into '%s'", *srcPcap, tgtPcap)
+		logFsEvent(zapcore.ErrorLevel,
+			fmt.Sprintf("failed to COPY file: %v", *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, 0, err)
+		return &tgtPcap, &pcapBytes,
+			fmt.Errorf("failed to copy '%s' into '%s'", *srcPcap, tgtPcap)
 	}
-	logFsEvent(zapcore.InfoLevel, fmt.Sprintf("COPIED: %s", *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, pcapBytes, nil)
+	logFsEvent(zapcore.InfoLevel,
+		fmt.Sprintf("COPIED: %s", *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, pcapBytes, nil)
 
 	if delete {
 		// remove the source PCAP file if copying is sucessful
 		err = os.Remove(*srcPcap)
 		if err != nil {
-			logFsEvent(zapcore.ErrorLevel, fmt.Sprintf("failed to DELETE file: %s", *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, pcapBytes, err)
+			logFsEvent(zapcore.ErrorLevel,
+				fmt.Sprintf("failed to DELETE file: %s", *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, pcapBytes, err)
 		} else {
-			logFsEvent(zapcore.InfoLevel, fmt.Sprintf("DELETED: %s", *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, pcapBytes, nil)
+			logFsEvent(zapcore.InfoLevel,
+				fmt.Sprintf("DELETED: %s", *srcPcap), PCAP_EXPORT, *srcPcap, tgtPcap, pcapBytes, nil)
 		}
 	}
 
@@ -245,7 +274,13 @@ func flushBuffers() (int, error) {
 	return fmt.Fprintln(fd, "3")
 }
 
-func exportPcapFile(wg *sync.WaitGroup, pcapDotExt *regexp.Regexp, srcFile *string, compress, delete, flush bool) bool {
+func exportPcapFile(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	pcapDotExt *regexp.Regexp,
+	srcFile *string,
+	compress, delete, flush bool,
+) bool {
 	defer wg.Done()
 
 	if flush && isActive.Load() {
@@ -265,13 +300,16 @@ func exportPcapFile(wg *sync.WaitGroup, pcapDotExt *regexp.Regexp, srcFile *stri
 
 	// `flushing` is the only thread-safe PCAP export operation.
 	if flush {
-		logFsEvent(zapcore.InfoLevel, fmt.Sprintf("flushing PCAP file: [%s] (%s/%s) %s", key, ext, iface, *srcFile), PCAP_EXPORT, *srcFile, "" /* target PCAP file */, 0, nil)
-		tgtPcapFileName, pcapBytes, moveErr := movePcapToGcs(srcFile, gcs_dir, compress, delete)
+		logFsEvent(zapcore.InfoLevel,
+			fmt.Sprintf("flushing PCAP file: [%s] (%s/%s) %s", key, ext, iface, *srcFile), PCAP_EXPORT, *srcFile, "" /* target PCAP file */, 0, nil)
+		tgtPcapFileName, pcapBytes, moveErr := movePcapToGcs(ctx, srcFile, gcs_dir, compress, delete)
 		if moveErr != nil {
-			logFsEvent(zapcore.ErrorLevel, fmt.Sprintf("failed to flush PCAP file: (%s/%s) %s", ext, iface, *srcFile), PCAP_FSNERR, *srcFile, *tgtPcapFileName /* target PCAP file */, 0, moveErr)
+			logFsEvent(zapcore.ErrorLevel,
+				fmt.Sprintf("failed to flush PCAP file: (%s/%s) %s", ext, iface, *srcFile), PCAP_FSNERR, *srcFile, *tgtPcapFileName /* target PCAP file */, 0, moveErr)
 			return false
 		}
-		logFsEvent(zapcore.InfoLevel, fmt.Sprintf("flushed PCAP file: (%s/%s) %s", ext, iface, *tgtPcapFileName), PCAP_EXPORT, *srcFile, *tgtPcapFileName, *pcapBytes, nil)
+		logFsEvent(zapcore.InfoLevel,
+			fmt.Sprintf("flushed PCAP file: (%s/%s) %s", ext, iface, *tgtPcapFileName), PCAP_EXPORT, *srcFile, *tgtPcapFileName, *pcapBytes, nil)
 		return true
 	}
 
@@ -281,7 +319,8 @@ func exportPcapFile(wg *sync.WaitGroup, pcapDotExt *regexp.Regexp, srcFile *stri
 		})
 	iteration := (*counter).Add(1)
 
-	logFsEvent(zapcore.InfoLevel, fmt.Sprintf("new PCAP file detected: [%s] (%s/%s/%d) %s", key, ext, iface, iteration, *srcFile), PCAP_CREATE, *srcFile, "" /* target PCAP file */, 0, nil)
+	logFsEvent(zapcore.InfoLevel,
+		fmt.Sprintf("new PCAP file detected: [%s] (%s/%s/%d) %s", key, ext, iface, iteration, *srcFile), PCAP_CREATE, *srcFile, "" /* target PCAP file */, 0, nil)
 
 	// Skip 1st PCAP, start moving PCAPs as soon as TCPDUMP rolls over into the 2nd file.
 	// The outcome of this implementation is that the directory in which TCPDUMP writes
@@ -298,28 +337,39 @@ func exportPcapFile(wg *sync.WaitGroup, pcapDotExt *regexp.Regexp, srcFile *stri
 		return false
 	}
 
-	logFsEvent(zapcore.InfoLevel, fmt.Sprintf("exporting PCAP file: (%s/%s/%d) %s", ext, iface, iteration, *srcFile), PCAP_EXPORT, lastPcapFileName, "" /* target PCAP file */, 0, nil)
+	logFsEvent(zapcore.InfoLevel,
+		fmt.Sprintf("exporting PCAP file: (%s/%s/%d) %s", ext, iface, iteration, *srcFile), PCAP_EXPORT, lastPcapFileName, "" /* target PCAP file */, 0, nil)
 	// move non-current PCAP file into `gcs_dir` which means that:
 	// 1. the GCS Bucket should have already been mounted
 	// 2. the directory hierarchy to store PCAP files already exists
-	tgtPcapFileName, pcapBytes, moveErr := movePcapToGcs(&lastPcapFileName, gcs_dir, compress, delete)
+	tgtPcapFileName, pcapBytes, moveErr := movePcapToGcs(ctx, &lastPcapFileName, gcs_dir, compress, delete)
 	if moveErr == nil {
-		logFsEvent(zapcore.InfoLevel, fmt.Sprintf("exported PCAP file: (%s/%s/%d) %s", ext, iface, iteration, *tgtPcapFileName), PCAP_EXPORT, lastPcapFileName, *tgtPcapFileName, *pcapBytes, nil)
+		logFsEvent(zapcore.InfoLevel,
+			fmt.Sprintf("exported PCAP file: (%s/%s/%d) %s", ext, iface, iteration, *tgtPcapFileName), PCAP_EXPORT, lastPcapFileName, *tgtPcapFileName, *pcapBytes, nil)
 	} else {
-		logFsEvent(zapcore.ErrorLevel, fmt.Sprintf("failed to export PCAP file: (%s/%s/%d) %s", ext, iface, iteration, lastPcapFileName), PCAP_EXPORT, lastPcapFileName, *tgtPcapFileName /* target PCAP file */, 0, moveErr)
+		logFsEvent(zapcore.ErrorLevel,
+			fmt.Sprintf("failed to export PCAP file: (%s/%s/%d) %s", ext, iface, iteration, lastPcapFileName), PCAP_EXPORT, lastPcapFileName, *tgtPcapFileName /* target PCAP file */, 0, moveErr)
 	}
 
 	// current PCAP file is the next one to be moved
 	if !lastPcap.CompareAndSwap(key, lastPcapFileName, *srcFile) {
-		logFsEvent(zapcore.ErrorLevel, fmt.Sprintf("leaked PCAP file: [%s] (%s/%s/%d) %s", key, ext, iface, iteration, *srcFile), PCAP_FSNERR, *srcFile, "" /* target PCAP file */, 0, nil)
+		logFsEvent(zapcore.ErrorLevel,
+			fmt.Sprintf("leaked PCAP file: [%s] (%s/%s/%d) %s", key, ext, iface, iteration, *srcFile), PCAP_FSNERR, *srcFile, "" /* target PCAP file */, 0, nil)
 		lastPcap.Set(key, *srcFile)
 	}
-	logFsEvent(zapcore.InfoLevel, fmt.Sprintf("queued PCAP file: (%s/%s/%d) %s", ext, iface, iteration, *srcFile), PCAP_QUEUED, *srcFile, "" /* target PCAP file */, 0, nil)
+	logFsEvent(zapcore.InfoLevel,
+		fmt.Sprintf("queued PCAP file: (%s/%s/%d) %s", ext, iface, iteration, *srcFile), PCAP_QUEUED, *srcFile, "" /* target PCAP file */, 0, nil)
 
 	return moveErr == nil
 }
 
-func flushSrcDir(wg *sync.WaitGroup, pcapDotExt *regexp.Regexp, sync, compress, delete bool, validator func(fs.FileInfo) bool) uint32 {
+func flushSrcDir(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	pcapDotExt *regexp.Regexp,
+	sync, compress, delete bool,
+	validator func(fs.FileInfo) bool,
+) uint32 {
 	pendingPcapFiles := uint32(0)
 	if sync {
 		flushBuffers()
@@ -335,7 +385,7 @@ func flushSrcDir(wg *sync.WaitGroup, pcapDotExt *regexp.Regexp, sync, compress, 
 		if validator(info) {
 			pendingPcapFiles += 1
 			wg.Add(1)
-			go exportPcapFile(wg, pcapDotExt, &path, compress, delete, true /* flush */)
+			go exportPcapFile(ctx, wg, pcapDotExt, &path, compress, delete, true /* flush */)
 		}
 		return nil
 	})
@@ -409,7 +459,7 @@ func main() {
 				// Skip events which are not CREATE, and all which are not related to PCAP files
 				if event.Has(fsnotify.Create) && pcapDotExt.MatchString(event.Name) {
 					wg.Add(1)
-					exportPcapFile(wg, pcapDotExt, &event.Name, *gzip_pcaps /* compress */, true /* delete */, false /* flush */)
+					exportPcapFile(ctx, wg, pcapDotExt, &event.Name, *gzip_pcaps /* compress */, true /* delete */, false /* flush */)
 				} else if event.Has(fsnotify.Create) && tcpdumpwExitSignal.MatchString(event.Name) && isActive.CompareAndSwap(true, false) {
 					// `tcpdumpw` wignals its termination by creating the file `TCPDUMPW_EXITED` is the source directory
 					tcpdumpwExitTS := time.Now()
@@ -486,7 +536,7 @@ func main() {
 
 		timer := time.AfterFunc(deadline-time.Since(signalTS), func() {
 			if isActive.CompareAndSwap(true, false) {
-				// cancel then context after 3s regardless of `tcpdumpw` termination signal:
+				// cancel the context after 3s regardless of `tcpdumpw` termination signal:
 				//   - this is effectively the `max_wait_time` for `tcpdumpw` termination signal.
 				cancel()
 			}
@@ -527,10 +577,13 @@ func main() {
 	// wait for all regular export operations to terminate
 	wg.Wait()
 
+	ctx = context.Background()
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+
 	flushStart := time.Now()
 	// flush remaining PCAP files after context is done
 	// compression & deletion are disabled when exiting in order to speed up the process
-	pendingPcapFiles := flushSrcDir(&wg, pcapDotExt,
+	pendingPcapFiles := flushSrcDir(ctx, &wg, pcapDotExt,
 		true /* sync */, false /* compress */, false, /* delete */
 		func(_ fs.FileInfo) bool { return true },
 	)

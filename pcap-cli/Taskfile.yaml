@@ -37,7 +37,6 @@ tasks:
 
   go-gen:
     cmds:
-      - task: clean
       - task: go-fmt
       - task: proto-gen
       - task: go-gen
@@ -45,7 +44,7 @@ tasks:
 
   go-test:
     cmds:
-      - go test -parallel 10 -v ./pkg/...
+      - go test -parallel 10 -v ./internal/transformer/...
 
   build:
     dotenv: [".env"]
@@ -61,10 +60,6 @@ tasks:
         -tags json,text,proto
         {{if .VERBOSE}}-v -a{{end}}
         cmd/pcap.go
-    sources:
-      - ./**/*.go
-    generates:
-      - ./release/bin/pcap
 
   dist:
     cmds:
@@ -74,7 +69,6 @@ tasks:
 
   docker-build:
     cmds:
-      - task: clean
       - task: proto-gen
       - >-
         docker buildx build

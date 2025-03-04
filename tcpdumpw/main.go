@@ -76,6 +76,7 @@ var (
 	ephemerals = flag.String("ephemerals", "32768,65535", "range of ephemeral ports")
 	compat     = flag.Bool("compat", false, "apply filters in Cloud Run gen1 mode")
 	rt_env     = flag.String("rt_env", "cloud_run_gen2", "runtime where PCAP sidecar is used")
+	pcap_debug = flag.Bool("debug", false, "enable debug logs")
 
 	supervisor = flag.String("supervisor", "http://127.0.0.1:23456", "supervisord 'serverurl'")
 
@@ -92,13 +93,14 @@ type (
 	}
 
 	tcpdumpJob struct {
+		ctx   context.Context `json:"-"`
 		j     *gocron.Job     `json:"-"`
 		Xid   string          `json:"xid,omitempty"`
 		Jid   string          `json:"jid,omitempty"`
 		Name  string          `json:"name,omitempty"`
 		Tags  []string        `json:"-"`
 		tasks []*pcapTask     `json:"-"`
-		ctx   context.Context `json:"-"`
+		debug bool            `json:"-"`
 	}
 
 	jLogLevel string
@@ -116,7 +118,7 @@ type (
 
 var (
 	projectID         string = os.Getenv("PROJECT_ID")
-	ifacePrefixEnvVar string = os.Getenv("PCAP_IFACE")
+	ifacePrefixEnvVar string = os.Getenv("PCAP_IFACE_SAFE")
 	sidecarEnvVar     string = os.Getenv("APP_SIDECAR")
 	moduleEnvVar      string = os.Getenv("PROC_NAME")
 	gaeEnvVar         string = os.Getenv("GCP_GAE")
@@ -279,7 +281,10 @@ func start(ctx context.Context, timeout *time.Duration, job *tcpdumpJob) error {
 	return ctx.Err()
 }
 
-func tcpdump(timeout time.Duration) error {
+func tcpdump(
+	timeout time.Duration,
+	debug bool,
+) error {
 	jobID := jid.Load().(uuid.UUID)
 	exeID := xid.Load().(uuid.UUID)
 
@@ -296,6 +301,7 @@ func tcpdump(timeout time.Duration) error {
 	ctx := context.WithValue(job.ctx, pcap.PcapContextID, id)
 	ctx = context.WithValue(ctx, pcap.PcapContextLogName,
 		fmt.Sprintf("projects/%s/pcap/%s", projectID, id))
+	ctx = context.WithValue(ctx, pcap.PcapContextDebug, debug)
 
 	err := start(ctx, &timeout, job)
 	if err == context.DeadlineExceeded || err == context.Canceled {
@@ -343,9 +349,9 @@ func createTasks(
 ) []*pcapTask {
 	tasks := []*pcapTask{}
 
-	iface := ifacePrefixEnvVar
+	iface := *ifacePrefix
 	if iface == "" {
-		iface = *ifacePrefix
+		iface = ifacePrefixEnvVar
 	}
 
 	isGAE, err := strconv.ParseBool(gaeEnvVar)
@@ -658,7 +664,11 @@ func main() {
 	tcpStopChannel := make(chan bool, 1)
 
 	// create empty job: used if CRON is not enabled
-	job := &tcpdumpJob{Jid: uuid.Nil.String(), tasks: tasks}
+	job := &tcpdumpJob{
+		Jid:   uuid.Nil.String(),
+		tasks: tasks,
+		debug: *pcap_debug,
+	}
 
 	jlog(INFO, job, fmt.Sprintf("acquired PCAP lock: %s", pcapLockFile))
 
@@ -681,6 +691,7 @@ func main() {
 		ctx = context.WithValue(ctx, pcap.PcapContextID, id)
 		logName := fmt.Sprintf("projects/%s/pcaps/%s", os.Getenv("PROJECT_ID"), id)
 		ctx = context.WithValue(ctx, pcap.PcapContextLogName, logName)
+		ctx = context.WithValue(ctx, pcap.PcapContextDebug, *pcap_debug)
 		// start the TCP listener for health checks
 		go startTCPListener(ctx, hc_port, job, tcpStopChannel)
 		start(ctx, &timeout, job)
@@ -722,7 +733,7 @@ func main() {
 	// Use the provided `cron` expression ro schedule the packet capturing job
 	j, err := s.NewJob(
 		gocron.CronJob(fmt.Sprintf("TZ=%s %s", *timezone, *cron_exp), true),
-		gocron.NewTask(tcpdump, timeout),
+		gocron.NewTask(tcpdump, timeout, *pcap_debug),
 		gocron.WithName("tcpdump"),
 		gocron.WithSingletonMode(gocron.LimitModeReschedule),
 		gocron.WithEventListeners(

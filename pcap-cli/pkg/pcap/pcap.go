@@ -23,7 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli/pkg/transformer"
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli/internal/transformer"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 	"github.com/wissance/stringFormatter"
@@ -59,6 +59,8 @@ type (
 		AddIPv6Ranges(...string)
 		AddL4Proto(L4Proto)
 		AddL4Protos(...L4Proto)
+		AllowSocket(string, string) bool
+		DenySocket(string, string) bool
 		AddPort(uint16)
 		AddPorts(...uint16)
 		DenyPort(uint16)
@@ -128,6 +130,7 @@ const (
 const (
 	PcapContextID      = transformer.ContextID
 	PcapContextLogName = transformer.ContextLogName
+	PcapContextDebug   = transformer.ContextDebug
 )
 
 const (

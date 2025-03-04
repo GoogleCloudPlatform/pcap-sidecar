@@ -56,6 +56,7 @@ exec env /bin/tcpdumpw \
     -ephemerals="${EPHEMERAL_PORT_RANGE:-32768,65535}" \
     -rt_env="${PCAP_RT_ENV:-cloud_run_gen2}" \
     -compat="${PCAP_COMPAT:-false}" \
+    -debug="${PCAP_DEBUG:-false}" \
     -supervisor="http://127.0.0.1:${PCAP_SUPERVISOR_PORT:-23456}" \
     -no_procs="${PCAP_TCPDUMPW_NO_PROCS:-gcsfuse}" \
     -no_procs_interval="${PCAP_TCPDUMPW_NO_PROCS_INTERVAL:-15}" \

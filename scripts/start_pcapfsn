@@ -19,18 +19,21 @@ if [[ "${PCAP_RT_ENV}" == "cloud_run_gen1" ]]; then
     export PCAP_COMPAT='true'
 fi
 
+ls -l /bin/pcap_fsn
+
 set -x
 
 ls -l "${PCAP_DIR}"
-ls -l /bin/pcap_fsn
 
 # `exec` allows `/bin/pcap_fsn` to receive signals directly
 exec env /bin/pcap_fsn \
     -src_dir=${PCAP_TMP} \
     -gcs_dir=${PCAP_DIR} \
     -pcap_ext="${PCAP_EXT}" \
-    -gzip=${PCAP_GZIP} \
-    -interval=${PCAP_SECS:-60} \
+    -gzip="${PCAP_GZIP:-true}" \
+    -interval="${PCAP_SECS:-60}" \
     -gae=${PCAP_GAE} \
-    -rt_env="${PCAP_RT_ENV:-cloud_run_gen2}" \
-    -compat="${PCAP_COMPAT:-false}"
+    -retries_max="${PCAP_FSN_RETRIES_MAX:-6}" \
+    -retries_delay="${PCAP_FSN_RETRIES_DELAY:-2}" \
+    -compat="${PCAP_COMPAT:-false}" \
+    -rt_env="${PCAP_RT_ENV:-cloud_run_gen2}"

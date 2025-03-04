@@ -26,7 +26,7 @@ import (
 
 	"github.com/Jeffail/gabs/v2"
 	"github.com/alphadose/haxmap"
-	"github.com/wissance/stringFormatter"
+	sf "github.com/wissance/stringFormatter"
 	"github.com/zhangyunhao116/skipmap"
 )
 
@@ -42,10 +42,12 @@ type (
 		map[uint32]*traceAndSpan,
 		map[uint32]*traceAndSpan,
 	) (*int64, *time.Duration)
+
 	UnlockWithTCPFlags = func(
 		context.Context,
 		*uint8, /* TCP flags */
 	) (bool, *time.Duration)
+
 	Unlock = func(context.Context) (bool, *time.Duration)
 
 	flowMutex struct {
@@ -64,10 +66,10 @@ type (
 	}
 
 	flowLockCarrier struct {
-		serial         *uint64
-		flowID         *uint64
 		mu             *sync.Mutex
 		wg             *sync.WaitGroup
+		serial         *uint64
+		flowID         *uint64
 		released       *atomic.Bool
 		createdAt      *time.Time
 		lastLockedAt   *time.Time
@@ -85,9 +87,9 @@ type (
 		unblocker *time.Timer
 	}
 
-	STTFM  = *skipmap.Uint32Map[*TracedFlow] // SequenceToTracedFlowMap
-	FTSM   = *haxmap.Map[uint32, STTFM]      // FlowToStreamMap
-	FTSTSM = *haxmap.Map[uint64, FTSM]       // FlowToStreamToSequenceMap
+	STTFM  = *skipmap.Uint32Map[*TracedFlow] // SequenceTo[TracedFlow]Map
+	STSM   = *haxmap.Map[uint32, STTFM]      // StreamTo[SequenceToTracedFlow]Map
+	FTSTSM = *haxmap.Map[uint64, STSM]       // FlowTo[StreamTo[SequenceToTracedFlow]]Map
 )
 
 const (
@@ -155,10 +157,10 @@ func (fm *flowMutex) log(
 	labels.Set(logName, "run.googleapis.com/pcap/name")
 
 	operation, _ := json.Object("logging.googleapis.com/operation")
-	operation.Set(stringFormatter.Format("{0}/debug", logName), "producer")
-	operation.Set(stringFormatter.Format("{0}/flow/{1}/debug", id, flowIDstr), "id")
+	operation.Set(sf.Format("{0}/debug", logName), "producer")
+	operation.Set(sf.Format("{0}/flow/{1}/debug", id, flowIDstr), "id")
 
-	json.Set(stringFormatter.Format("#:{0} | flow:{1} | {2}", serialStr, flowIDstr, *message), "message")
+	json.Set(sf.Format("#:{0} | flow:{1} | {2}", serialStr, flowIDstr, *message), "message")
 
 	io.WriteString(os.Stderr, json.String()+"\n")
 }
@@ -166,7 +168,7 @@ func (fm *flowMutex) log(
 func (fm *flowMutex) startReaper(ctx context.Context) {
 	// reaping is necessary as packets translations order is not guaranteed:
 	// so if all `FIN+ACK`/`RST+*` are seen before other non-termination combinations within the same flow:
-	//   - a new carrier will be created to hold its flow lock, and this carrier will not be organically reaped.
+	//   - a new carrier will be created to hold its flow lock, and this new carrier will not be organically reaped.
 	// additionally: for connection pooling, long running not-used connections should be dropped to reclaim memory.
 	ticker := time.NewTicker(carrierDeadline)
 
@@ -188,7 +190,8 @@ func (fm *flowMutex) startReaper(ctx context.Context) {
 					if lastUnlocked >= carrierDeadline {
 						fm.untrackConnection(ctx, &flowID, carrier)
 						fm.MutexMap.Del(flowID)
-						io.WriteString(os.Stderr, fmt.Sprintf("reaped flow '%d' after %v\n", flowID, lastUnlocked))
+						io.WriteString(os.Stderr,
+							sf.Format("reaped flow '{0}' after {1}\n", flowID, lastUnlocked.String()))
 					}
 					return true
 				})
@@ -246,6 +249,34 @@ func (fm *flowMutex) getTracedFlow(
 	}, true
 }
 
+func (fm *flowMutex) sequenceToTracedFlowMapProvider(
+	ctx context.Context,
+	serial *uint64,
+	flowID *uint64,
+	tcpFlags *uint8,
+	isLocal bool,
+	streamID *uint32,
+	seq, ack *uint32,
+	tf *TracedFlow,
+	streamToSequenceMap STSM,
+) STTFM {
+	sttfm, _ := streamToSequenceMap.GetOrCompute(*streamID, func() STTFM {
+		sequenceToTracedFlowMap := skipmap.NewUint32[*TracedFlow]()
+		if isLocal {
+			sequenceToTracedFlowMap.Store(*ack, tf)
+		} else {
+			sequenceToTracedFlowMap.Store(*seq, tf)
+		}
+
+		trackingTS := time.Now()
+		trackingMsg := sf.Format("tracking/{0}", *tf.ts.traceID)
+		go fm.log(ctx, serial, flowID, tcpFlags, seq, ack, &trackingTS, &trackingMsg)
+
+		return sequenceToTracedFlowMap
+	})
+	return sttfm
+}
+
 func (fm *flowMutex) trackConnection(
 	ctx context.Context,
 	lock *flowLockCarrier,
@@ -262,52 +293,57 @@ func (fm *flowMutex) trackConnection(
 	var isActive atomic.Bool
 
 	tf := &TracedFlow{
+		lock:     lock,
 		serial:   serial,
 		flowID:   flowID,
-		lock:     lock,
 		ts:       ts,
 		isActive: &isActive,
 	}
+
 	isActive.Store(true)
+
 	tf.unblocker = time.AfterFunc(trackingDeadline, func() {
 		// allow termination events to continue
 		if !isActive.CompareAndSwap(true, false) {
 			return
 		}
+
 		lock.mu.Lock()
 		defer lock.mu.Unlock()
+
 		tsBeforeUnblocling := time.Now()
-		msgBeforeUnblocking := "unblocking"
+		msgBeforeUnblocking := sf.Format("unblocking/{0}", *ts.traceID)
 		go fm.log(ctx, serial, flowID, tcpFlags, seq, ack, &tsBeforeUnblocling, &msgBeforeUnblocking)
+
 		if lock.activeRequests.Add(-1) >= 0 {
 			lock.wg.Done()
 			tsAfterUnblocking := time.Now()
-			msgAfterUnblocking := "unblocked"
+			msgAfterUnblocking := sf.Format("unblocked/{0}", *ts.traceID)
 			go fm.log(ctx, serial, flowID, tcpFlags, seq, ack, &tsAfterUnblocking, &msgAfterUnblocking)
 		}
 	})
 
-	sequenceToTraceAndSpanMapProvider := func(streamToSequenceMap FTSM) STTFM {
-		sequenceToTraceAndSpanMap := skipmap.NewUint32[*TracedFlow]()
-		if local {
-			sequenceToTraceAndSpanMap.Store(*ack, tf)
-		} else {
-			sequenceToTraceAndSpanMap.Store(*seq, tf)
-		}
-		streamToSequenceMap.Set(*ts.streamID, sequenceToTraceAndSpanMap)
-		return sequenceToTraceAndSpanMap
-	}
-
-	streamToSequenceMap, _ := fm.flowToStreamToSequenceMap.
-		GetOrCompute(*flowID, func() FTSM {
+	if streamToSequenceMap, loaded := fm.flowToStreamToSequenceMap.
+		GetOrCompute(*flowID, func() STSM {
 			streamToSequenceMap := haxmap.New[uint32, STTFM]()
-			sequenceToTraceAndSpanMapProvider(streamToSequenceMap)
+			fm.sequenceToTracedFlowMapProvider(ctx,
+				serial, flowID, tcpFlags, local, ts.streamID, seq, ack, tf, streamToSequenceMap)
 			return streamToSequenceMap
-		})
-
-	_, _ = streamToSequenceMap.GetOrCompute(*ts.streamID, func() STTFM {
-		return sequenceToTraceAndSpanMapProvider(streamToSequenceMap)
-	})
+		}); loaded {
+		// if the `Flow-to-Sequence-MAP` already contains an entry for this `FlowID`:
+		//   - the `Stream-to-[Sequence-to-TracedFlow]-MAP` pointed by the `FlowID`:
+		//     - does not contain this `StreamID` pointing to its own `Sequence-to-TracedFlow-MAP`.
+		if _, loaded := streamToSequenceMap.GetOrCompute(*ts.streamID, func() STTFM {
+			return fm.sequenceToTracedFlowMapProvider(ctx,
+				serial, flowID, tcpFlags, local, ts.streamID, seq, ack, tf, streamToSequenceMap)
+		}); loaded {
+			// if the `Stream-to-[Sequence-to-TracedFlow]-MAP` already contains an entry for this `StreamID`:
+			//   - the `Sequence-to-TracedFlow-MAP` pointed by the `StreamID`:
+			//     - does not contain this `sequence` pointing to its own `TracedFlow`.
+			fm.sequenceToTracedFlowMapProvider(ctx,
+				serial, flowID, tcpFlags, local, ts.streamID, seq, ack, tf, streamToSequenceMap)
+		}
+	}
 
 	return tf, true
 }
@@ -319,48 +355,58 @@ func (fm *flowMutex) untrackConnection(
 ) {
 	defer func() {
 		if r := recover(); r != nil && fm.Debug {
-			transformerLogger.Println("PANIC@untrackConnection: ", r)
+			transformerLogger.Println("panic@untrackConnection: ", r)
 		}
 	}()
 
 	if ftsm, ok := fm.flowToStreamToSequenceMap.Get(*flowID); ok {
 		streams := make([]uint32, ftsm.Len())
 		streamIndex := 0
+
 		ftsm.ForEach(func(stream uint32, sttsm STTFM) bool {
 			streams[streamIndex] = stream
 			sequences := make([]uint32, sttsm.Len())
 			sequenceIndex := 0
+
 			sttsm.Range(func(sequence uint32, tf *TracedFlow) bool {
 				sequences[sequenceIndex] = sequence
 				if tf.isActive.CompareAndSwap(true, false) {
 					tf.unblocker.Stop()
 				}
+
 				// remove orphaned `traceID`s:
 				fm.traceToHttpRequestMap.Del(*tf.ts.traceID)
+
 				sequenceIndex += 1
 				return true
 			})
-			streamIndex += 1
+
 			for i := sequenceIndex - 1; i >= 0; i-- {
 				sttsm.Delete(sequences[i])
 			}
+
+			streamIndex += 1
 			return true
 		})
+
 		for i := streamIndex - 1; i >= 0; i-- {
 			ftsm.Del(streams[i])
 		}
+
 		fm.flowToStreamToSequenceMap.Del(*flowID)
 	}
 
 	for lock.activeRequests.Load() > 0 {
-		lock.wg.Done()
 		lock.activeRequests.Add(-1)
+		lock.wg.Done()
 	}
 
 	fm.MutexMap.Del(*flowID)
 }
 
-func (fm *flowMutex) newFlowLockCarrier(serial, flowID *uint64) *flowLockCarrier {
+func (fm *flowMutex) newFlowLockCarrier(
+	serial, flowID *uint64,
+) *flowLockCarrier {
 	var activeRequests atomic.Int64
 	var released atomic.Bool
 
@@ -369,10 +415,10 @@ func (fm *flowMutex) newFlowLockCarrier(serial, flowID *uint64) *flowLockCarrier
 	createdAt := time.Now()
 
 	return &flowLockCarrier{
-		serial:         serial, // packet that created this lock
-		flowID:         flowID, // flow that created this lock
 		mu:             new(sync.Mutex),
 		wg:             new(sync.WaitGroup),
+		serial:         serial, // packet that created this lock
+		flowID:         flowID, // flow that created this lock
 		released:       &released,
 		createdAt:      &createdAt,
 		activeRequests: &activeRequests,
@@ -450,7 +496,7 @@ func (fm *flowMutex) lock(
 		}(mu)
 		defer mu.Unlock()
 		lastUnlockedTS := time.Now()
-		carrier.lastLockedAt = &lastUnlockedTS
+		carrier.lastUnlockedAt = &lastUnlockedTS
 	}
 
 	UnlockAndReleaseFN := func(ctx context.Context) (bool, *time.Duration) {
@@ -515,18 +561,19 @@ func (fm *flowMutex) lock(
 	}
 
 	if *tcpFlags&(tcpSyn|tcpFin|tcpRst) == 0 {
-		// provide trace tracking only for TCP `PSH+ACK`.
+		// provide trace tracking only for TCP: `PSH+ACK`, and `ACK`.
 		// For HTTP/2 multiple streams are delivered over the same TCP connection, so:
 		//   - it is possible to observe multiple requests and responses in the same TCP segment,
-		//   - `unlock` must handle the scenario where the same TCP segment contains both requests and responses.
-		// It is possible to receive requests/responses without `traceID`, so:
+		//   - `unlock` must handle the scenario where the same TCP segment contains both HTTP requests/responses.
+		// It is possible to receive HTTP requests/responses without `traceID`, so:
 		//   - both must be accounted to accurately calculate the total number of `activeRequests`:
 		//     - this is regardless of `traceID` being available; otherwise, termination packets are blocked:
 		//       - this will not trigger a deadlock as only the termination is being delayed,
 		//       - the `unblocker`s will eventually allow termination packets to make progress.
-		// The following flow unlocking mechanism tries to:
-		//   - prevent trace tracking information removal by connection termination packets
-		//   - store trace tracking information for HTTP requests: that will be used to link to HTTP responses
+		// The following flow-unlocking mechanism tries to:
+		//   - prevent trace-tracking information removal by connection termination packets
+		//   - store trace-tracking information for HTTP requests/responses:
+		//     - that will be used to link HTTP requests to HTTP responses.
 		lock.UnlockWithTraceAndSpan = func(
 			ctx context.Context,
 			tcpFlags *uint8,
@@ -540,25 +587,26 @@ func (fm *flowMutex) lock(
 			activeRequests := carrier.activeRequests.Load()
 
 			sizeOfRequestStreams := int64(len(requestStreams))
-			sizeOfResponseStreams := int64(len(responseStreams))
-
 			sizeOfRequestTraceAndSpans := len(requestTS)
 			// handle flow `unlock` for requests
 			if sizeOfRequestTraceAndSpans > 0 || sizeOfRequestStreams > 0 {
 				for _, stream := range requestStreams {
-					activeRequests = carrier.activeRequests.Add(1)
 					if ts, tsAvailable := requestTS[stream]; tsAvailable {
 						// tracking connections allows for HTTP responses without trace headers
 						// to be correlated with the request that brought them to existence.
 						if tf, tracked := fm.trackConnection(ctx,
 							carrier, serial, flowID, tcpFlags, seq, ack, local, ts); tracked {
+							activeRequests = carrier.activeRequests.Add(1)
 							if activeRequests > 0 {
-								// if HTTP more responses are seen before the currently observed requests:
-								//   - do block `FIN+ACK` from making progress;
-								// another alternative would be to allow the `unblocker` to call `Done()` on `wg`
 								wg.Add(1)
+
+								requestTS := time.Now()
+								requestMsg := sf.Format("request/{0}", *ts.traceID)
+								go fm.log(ctx, serial, flowID, tcpFlags, seq, ack, &requestTS, &requestMsg)
 							} else if tf.isActive.CompareAndSwap(true, false) {
-								// de-activate the `unblocker` for this `TracedFlow`
+								// if more HTTP responses are seen before the currentl HTTP request:
+								//   - do not block `FIN+ACK`/`RST` packets from making progress;
+								// de-activate the `unblocker` for this `TracedFlow`.
 								tf.unblocker.Stop()
 							}
 						}
@@ -566,18 +614,23 @@ func (fm *flowMutex) lock(
 				}
 			}
 
+			sizeOfResponseStreams := int64(len(responseStreams))
 			sizeOfResponseTraceAndSpans := len(responseTS)
 			// handle flow `unlock` for responses
 			if sizeOfResponseTraceAndSpans > 0 || sizeOfResponseStreams > 0 {
 				for _, stream := range responseStreams {
-					activeRequests = carrier.activeRequests.Add(-1)
 					if ts, tsAvailable := responseTS[stream]; tsAvailable {
 						if tf, traceFound := tracedFlowProvider(ts.streamID); traceFound {
+							activeRequests = carrier.activeRequests.Add(-1)
 							if activeRequests >= 0 &&
 								*tf.ts.traceID == *ts.traceID &&
-								tf.isActive.CompareAndSwap(true, false) {
-								tf.unblocker.Stop()
+								tf.isActive.CompareAndSwap(true, false) &&
+								tf.unblocker.Stop() {
 								wg.Done()
+
+								responseTS := time.Now()
+								responseMsg := sf.Format("response/{0}", *ts.traceID)
+								go fm.log(ctx, serial, flowID, tcpFlags, seq, ack, &responseTS, &responseMsg)
 							}
 						}
 					}
@@ -592,10 +645,12 @@ func (fm *flowMutex) lock(
 		// do not provide trace tracking for non TCP `PSH+ACK`
 		lock.UnlockWithTraceAndSpan = func(
 			ctx context.Context,
-			tcpFlags *uint8, _ bool,
-			_ []uint32, _ []uint32,
-			_ map[uint32]*traceAndSpan,
-			_ map[uint32]*traceAndSpan,
+			tcpFlags *uint8, /* tcpFlags */
+			_ bool, /* isHTTP2 */
+			_ []uint32, /* requestStreams */
+			_ []uint32, /* responseStreams */
+			_ map[uint32]*traceAndSpan, /* requestTS */
+			_ map[uint32]*traceAndSpan, /* responseTS */
 		) (*int64, *time.Duration) {
 			// fallback to unlock by TCP flags
 			_, lockLatency := UnlockWithTCPFlagsFN(ctx, tcpFlags)

@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli/pkg/transformer"
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli/internal/transformer"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
