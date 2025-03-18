@@ -461,7 +461,7 @@ func main() {
 					wg.Add(1)
 					exportPcapFile(ctx, wg, pcapDotExt, &event.Name, *gzip_pcaps /* compress */, true /* delete */, false /* flush */)
 				} else if event.Has(fsnotify.Create) && tcpdumpwExitSignal.MatchString(event.Name) && isActive.CompareAndSwap(true, false) {
-					// `tcpdumpw` wignals its termination by creating the file `TCPDUMPW_EXITED` is the source directory
+					// `tcpdumpw` signals its termination by creating the file `TCPDUMPW_EXITED` is the source directory
 					tcpdumpwExitTS := time.Now()
 					logEvent(zapcore.InfoLevel,
 						"detected 'tcpdumpw' termination signal",

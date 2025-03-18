@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+ARG GOLANG_VERSION='1.23.7'
 ARG LIBPCAP_VERSION='1.10.5'
 ARG TCPDUMP_VERSION='4.99.5'
 
 FROM pcap-base:libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION} AS base
 
-FROM --platform=linux/amd64 golang:1.22.4-bookworm
+ARG GOLANG_VERSION='1.23.7'
+
+FROM --platform=linux/amd64 golang:${GOLANG_VERSION}-bookworm
 
 USER 0:0
 

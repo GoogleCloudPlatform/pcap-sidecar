@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify
 
-go 1.22.4
+go 1.23.7
 
 require (
 	github.com/alphadose/haxmap v1.4.0

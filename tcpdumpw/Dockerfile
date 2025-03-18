@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ARG GOLANG_VERSION='1.23.7'
 ARG LIBPCAP_VERSION='1.10.5'
 ARG TCPDUMP_VERSION='4.99.5'
 
@@ -42,7 +43,7 @@ ENV GOARCH=amd64
 
 RUN go install mvdan.cc/gofumpt@latest \
   && gofumpt -l -w ./main.go \
-  && go mod tidy -compat=1.22.4 \
+  && go mod tidy -compat="${GOLANG_VERSION}" \
   && go mod download \
   && go build -a -v -tags json -o /app/tcpdumpw/bin/${BIN_NAME} main.go
 

@@ -13,8 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ARG GOLANG_VERSION='1.23.7'
 
-FROM --platform=linux/amd64 golang:1.22.4-bookworm AS builder
+FROM --platform=linux/amd64 golang:${GOLANG_VERSION}-bookworm AS builder
+
+ARG GOLANG_VERSION='1.23.7'
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BIN_NAME=pcap
@@ -34,7 +37,7 @@ RUN go install golang.org/x/tools/cmd/stringer@latest
 ENV GOOS=linux
 ENV GOARCH=amd64
 
-RUN go mod tidy -compat=1.22.4
+RUN go mod tidy -compat="${GOLANG_VERSION}"
 RUN go mod download
 RUN gofumpt -l -w ./cmd/
 RUN gofumpt -l -w ./pkg/

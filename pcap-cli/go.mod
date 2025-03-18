@@ -1,6 +1,7 @@
 module github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli
 
-go 1.22.4
+go 1.23.7
+
 toolchain go1.23.7
 
 retract v1.0.0-dev

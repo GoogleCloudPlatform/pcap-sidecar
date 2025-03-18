@@ -45,6 +45,7 @@ function docker_build_base {
   
   docker buildx build --no-cache \
     --file="${DOCKER_FILE}" \
+    --build-arg="GOLANG_VERSION=${GOLANG_VERSION}" \
     --build-arg="LIBPCAP_VERSION=${LIBPCAP_VERSION}" \
     --build-arg="TCPDUMP_VERSION=${TCPDUMP_VERSION}" \
     --build-arg="LIBPCAP_URL=${LIBPCAP_URL}" \
@@ -66,6 +67,7 @@ function docker_build {
   docker buildx build \
     --platform=linux/amd64 \
     --file="${1}/Dockerfile" \
+    --build-arg="GOLANG_VERSION=${GOLANG_VERSION}" \
     --build-arg="LIBPCAP_VERSION=${LIBPCAP_VERSION}" \
     --build-arg="TCPDUMP_VERSION=${TCPDUMP_VERSION}" \
     --no-cache --output "${BIN_DIR}" --target releaser .
@@ -82,6 +84,7 @@ function docker_release {
     --platform=linux/amd64 \
     --file="$(pwd)/Dockerfile" \
     --build-arg="PCAP_RT_ENV=${PCAP_RT_ENV}" \
+    --build-arg="GOLANG_VERSION=${GOLANG_VERSION}" \
     --build-arg="LIBPCAP_VERSION=${LIBPCAP_VERSION}" \
     --build-arg="TCPDUMP_VERSION=${TCPDUMP_VERSION}" \
     --label="LIBPCAP_VERSION=${LIBPCAP_VERSION}" \

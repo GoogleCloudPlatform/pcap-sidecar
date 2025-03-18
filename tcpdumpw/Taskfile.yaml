@@ -58,7 +58,7 @@ tasks:
       - task: update-gitmodules
       - task: go-fmt
       - task: go-gen
-      - go mod tidy -compat=1.22.4
+      - go mod tidy -compat=$GOLANG_VERSION
       - >-
         go build
         -tags json

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	ps "github.com/mitchellh/go-ps"
+	sf "github.com/wissance/stringFormatter"
 )
 
 var tcpdumpLogger = log.New(os.Stderr, "[tcpdump] - ", log.LstdFlags)
@@ -44,7 +45,7 @@ func (t *Tcpdump) buildArgs(ctx context.Context) []string {
 	if cfg.Output != "stdout" {
 		directory := filepath.Dir(cfg.Output)
 		template := filepath.Base(cfg.Output)
-		fileNameTemplate := fmt.Sprintf("%s/%s.%s", directory, template, cfg.Extension)
+		fileNameTemplate := sf.Format("{0}/{1}.{2}", directory, template, cfg.Extension)
 		args = append(args, "-w", fileNameTemplate)
 	}
 
@@ -52,7 +53,7 @@ func (t *Tcpdump) buildArgs(ctx context.Context) []string {
 		args = append(args, "-G", fmt.Sprintf("%d", cfg.Interval))
 	}
 
-	if cfg.Iface != anyDeviceName {
+	if !cfg.Compat {
 		if filter := providePcapFilter(ctx,
 			&cfg.Filter, cfg.Filters); *filter != "" {
 			args = append(args, *filter)

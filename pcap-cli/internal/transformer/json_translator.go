@@ -971,7 +971,7 @@ func (t *JSONPcapTranslator) finalize(
 
 	seq, _ := json.S("L4", "seq").Data().(uint32)
 	data["tcpSeq"] = seq
-	ack, _ := json.S("L4d", "ack").Data().(uint32)
+	ack, _ := json.S("L4", "ack").Data().(uint32)
 	data["tcpAck"] = ack
 	tcpLen, _ := json.S("L4", "len").Data().(string)
 	data["tcpLen"] = tcpLen
