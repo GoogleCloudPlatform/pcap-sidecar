@@ -115,7 +115,7 @@ func TestParseTCPflags(t *testing.T) {
 // TestIsEphemeralPort verifies the logic for checking if a port is within the ephemeral range.
 func TestIsEphemeralPort(t *testing.T) {
 	t.Parallel()
-	eph := &PcapEmphemeralPorts{
+	eph := &PcapEphemeralPorts{
 		Min: 32768,
 		Max: 65535,
 	}
@@ -152,7 +152,7 @@ func TestIsEphemeralPort(t *testing.T) {
 // TestIsEphemeralUDPPort verifies the wrapper for UDP ports.
 func TestIsEphemeralUDPPort(t *testing.T) {
 	t.Parallel()
-	eph := &PcapEmphemeralPorts{
+	eph := &PcapEphemeralPorts{
 		Min: 32768,
 		Max: 65535,
 	}
@@ -188,7 +188,7 @@ func TestIsEphemeralUDPPort(t *testing.T) {
 // TestIsEphemeralTCPPort verifies the wrapper for TCP ports.
 func TestIsEphemeralTCPPort(t *testing.T) {
 	t.Parallel()
-	eph := &PcapEmphemeralPorts{
+	eph := &PcapEphemeralPorts{
 		Min: 32768,
 		Max: 65535,
 	}

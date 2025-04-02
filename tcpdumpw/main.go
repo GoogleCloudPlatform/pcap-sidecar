@@ -320,7 +320,7 @@ func newPcapConfig(
 	compatFilters pcap.PcapFilters,
 	snaplen, interval int,
 	compat, ordered, conntrack bool,
-	ephemerals *pcap.PcapEmphemeralPorts,
+	ephemerals *pcap.PcapEphemeralPorts,
 ) *pcap.PcapConfig {
 	return &pcap.PcapConfig{
 		Compat:        compat,
@@ -348,7 +348,7 @@ func createTasks(
 	compatFilters pcap.PcapFilters,
 	snaplen, interval *int,
 	compat, tcpdump, jsondump, jsonlog, ordered, conntrack, gcpGAE *bool,
-	ephemerals *pcap.PcapEmphemeralPorts,
+	ephemerals *pcap.PcapEphemeralPorts,
 ) []*pcapTask {
 	tasks := []*pcapTask{}
 
@@ -553,9 +553,9 @@ func appendFilter(
 	return filters
 }
 
-func parseEphemeralPorts(ephemerals *string) *pcap.PcapEmphemeralPorts {
+func parseEphemeralPorts(ephemerals *string) *pcap.PcapEphemeralPorts {
 	// default ephemeral ports range
-	ephemeralPortRange := &pcap.PcapEmphemeralPorts{
+	ephemeralPortRange := &pcap.PcapEphemeralPorts{
 		Min: pcap.PCAP_MIN_EPHEMERAL_PORT,
 		Max: pcap.PCAP_MAX_EPHEMERAL_PORT,
 	}

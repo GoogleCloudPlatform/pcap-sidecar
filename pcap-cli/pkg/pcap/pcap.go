@@ -37,7 +37,7 @@ type (
 
 	L4Proto = transformer.L4Proto
 
-	PcapEmphemeralPorts = transformer.PcapEmphemeralPorts
+	PcapEphemeralPorts = transformer.PcapEphemeralPorts
 
 	PcapFilterMode uint8
 
@@ -94,7 +94,7 @@ type (
 		Device        *PcapDevice
 		Filters       []PcapFilterProvider
 		CompatFilters PcapFilters
-		Ephemerals    *PcapEmphemeralPorts
+		Ephemerals    *PcapEphemeralPorts
 	}
 
 	PcapEngine interface {

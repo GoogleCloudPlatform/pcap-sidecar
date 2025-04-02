@@ -39,7 +39,7 @@ import (
 var transformerLogger = log.New(os.Stderr, "[transformer] - ", log.LstdFlags)
 
 type (
-	PcapTranslatorFactory = func(context.Context, bool, *PcapIface, *PcapEmphemeralPorts) PcapTranslator
+	PcapTranslatorFactory = func(context.Context, bool, *PcapIface, *PcapEphemeralPorts) PcapTranslator
 
 	PcapTranslatorFmt uint8
 
@@ -73,7 +73,7 @@ type (
 		ctx             context.Context
 		iface           *PcapIface
 		ifaces          netIfaceIndex
-		ephemerals      *PcapEmphemeralPorts
+		ephemerals      *PcapEphemeralPorts
 		loggerPrefix    *string
 		ich             chan concurrently.WorkFunction
 		och             <-chan concurrently.OrderedOutput
@@ -110,7 +110,7 @@ type (
 		Addrs mapset.Set[string]
 	}
 
-	PcapEmphemeralPorts struct {
+	PcapEphemeralPorts struct {
 		Min, Max uint16
 	}
 
@@ -470,7 +470,7 @@ func newTranslator(
 	ctx context.Context,
 	debug bool,
 	iface *PcapIface,
-	ephemerals *PcapEmphemeralPorts,
+	ephemerals *PcapEphemeralPorts,
 	format PcapTranslatorFmt,
 ) (PcapTranslator, error) {
 	if factory, ok := translators.Load(format); ok {
@@ -614,7 +614,7 @@ func provideStrategy(
 func newTransformer(
 	ctx context.Context,
 	iface *PcapIface,
-	ephemerals *PcapEmphemeralPorts,
+	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
 	writers []io.Writer,
 	format *string,
@@ -718,7 +718,7 @@ func newTransformer(
 func NewOrderedTransformer(
 	ctx context.Context,
 	iface *PcapIface,
-	ephemerals *PcapEmphemeralPorts,
+	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
 	writers []io.Writer,
 	format *string,
@@ -730,7 +730,7 @@ func NewOrderedTransformer(
 func NewConnTrackTransformer(
 	ctx context.Context,
 	iface *PcapIface,
-	ephemerals *PcapEmphemeralPorts,
+	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
 	writers []io.Writer,
 	format *string,
@@ -742,7 +742,7 @@ func NewConnTrackTransformer(
 func NewDebugTransformer(
 	ctx context.Context,
 	iface *PcapIface,
-	ephemerals *PcapEmphemeralPorts,
+	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
 	writers []io.Writer,
 	format *string,
@@ -754,7 +754,7 @@ func NewDebugTransformer(
 func NewTransformer(
 	ctx context.Context,
 	iface *PcapIface,
-	ephemerals *PcapEmphemeralPorts,
+	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
 	writers []io.Writer,
 	format *string,

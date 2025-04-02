@@ -47,16 +47,16 @@ func parseTCPflags(tcp *layers.TCP) uint8 {
 	return setFlags
 }
 
-func (eph *PcapEmphemeralPorts) isEphemeralPort(port *uint16) bool {
+func (eph *PcapEphemeralPorts) isEphemeralPort(port *uint16) bool {
 	return *port >= eph.Min && *port <= eph.Max
 }
 
-func (eph *PcapEmphemeralPorts) isEphemeralUDPPort(udpPort *layers.UDPPort) bool {
+func (eph *PcapEphemeralPorts) isEphemeralUDPPort(udpPort *layers.UDPPort) bool {
 	port := uint16(*udpPort)
 	return eph.isEphemeralPort(&port)
 }
 
-func (eph *PcapEmphemeralPorts) isEphemeralTCPPort(tcpPort *layers.TCPPort) bool {
+func (eph *PcapEphemeralPorts) isEphemeralTCPPort(tcpPort *layers.TCPPort) bool {
 	port := uint16(*tcpPort)
 	return eph.isEphemeralPort(&port)
 }

@@ -233,7 +233,7 @@ func NewPcap(config *PcapConfig) (PcapEngine, error) {
 	if config.Ephemerals == nil ||
 		config.Ephemerals.Min < pcap_min_ephemeral_port ||
 		config.Ephemerals.Min >= config.Ephemerals.Max {
-		config.Ephemerals = &PcapEmphemeralPorts{
+		config.Ephemerals = &PcapEphemeralPorts{
 			Min: PCAP_MIN_EPHEMERAL_PORT,
 			Max: PCAP_MAX_EPHEMERAL_PORT,
 		}

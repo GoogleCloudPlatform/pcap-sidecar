@@ -166,7 +166,7 @@ func newPROTOPcapTranslator(
 	_ context.Context,
 	_ bool,
 	iface *PcapIface,
-	_ *PcapEmphemeralPorts,
+	_ *PcapEphemeralPorts,
 ) PcapTranslator {
 	return &ProtoPcapTranslator{iface: iface}
 }

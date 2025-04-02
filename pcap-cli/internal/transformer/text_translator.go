@@ -191,7 +191,7 @@ func newTEXTPcapTranslator(
 	_ context.Context,
 	_ bool,
 	iface *PcapIface,
-	_ *PcapEmphemeralPorts,
+	_ *PcapEphemeralPorts,
 ) PcapTranslator {
 	return &TextPcapTranslator{iface: iface}
 }
