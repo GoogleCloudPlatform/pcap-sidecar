@@ -49,7 +49,7 @@ type (
 	JSONPcapTranslator struct {
 		fm                        *flowMutex
 		iface                     *PcapIface
-		ephemerals                *PcapEmphemeralPorts
+		ephemerals                *PcapEphemeralPorts
 		traceToHttpRequestMap     *haxmap.Map[string, *httpRequest]
 		flowToStreamToSequenceMap FTSTSM
 	}
@@ -1662,7 +1662,7 @@ func newJSONPcapTranslator(
 	ctx context.Context,
 	debug bool,
 	iface *PcapIface,
-	ephemerals *PcapEmphemeralPorts,
+	ephemerals *PcapEphemeralPorts,
 ) PcapTranslator {
 	flowToStreamToSequenceMap := haxmap.New[uint64, STSM]()
 	traceToHttpRequestMap := haxmap.New[string, *httpRequest]()
