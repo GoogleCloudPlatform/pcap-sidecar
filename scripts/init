@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-printenv
-tcpdump --version
-
 export MDS_URL='http://metadata.google.internal/computeMetadata/v1'
 export MDS_CURL="curl -s -H Metadata-Flavor:Google ${MDS_URL}"
 
@@ -34,6 +31,10 @@ PCAP_FILE="${PCAP_TMP}/part"
 GCS_DIR="${GOOGLE_CLOUD_PROJECT}/${PCAP_EXEC_ENV}/${K_SERVICE}/${GCP_REGION}/${K_REVISION}/${PCAP_DATE}/${INSTANCE_ID}"
 PCAP_DIR="${PCAP_MNT}/${GCS_DIR}"
 
+export PCAP_GCS_FUSE=${PCAP_GCS_FUSE:-true}
+export PCAP_TCPDUMP=${PCAP_TCPDUMP:-true}
+export PCAP_JSONDUMP=${PCAP_JSON:-false}
+
 echo "PCAP_DEBUG=${PCAP_DEBUG:-false}" >> ${ENV_FILE}
 echo "PCAP_SUPERVISOR_PORT=${PCAP_SUPERVISOR_PORT:-23456}" >> ${ENV_FILE}
 echo "PCAP_COMPAT=${PCAP_COMPAT:-false}" >> ${ENV_FILE}
@@ -51,7 +52,7 @@ echo "PCAP_MNT=${PCAP_MNT}" >> ${ENV_FILE}
 echo "PCAP_TMP=${PCAP_TMP}" >> ${ENV_FILE}
 echo "PCAP_FILE=${PCAP_FILE}" >> ${ENV_FILE}
 echo "PCAP_DIR=${PCAP_DIR}" >> ${ENV_FILE}
-echo "PCAP_GCS_FUSE=${PCAP_GCS_FUSE:-true}" >> ${ENV_FILE}
+echo "PCAP_GCS_FUSE=${PCAP_GCS_FUSE}" >> ${ENV_FILE}
 echo "PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET}" >> ${ENV_FILE}
 echo "PCAP_GCS_DIR=${GCS_DIR}" >> ${ENV_FILE}
 echo "GCS_DIR=${GCS_DIR}" >> ${ENV_FILE}
@@ -64,8 +65,8 @@ echo "PCAP_TZ=${PCAP_TIMEZONE:-UTC}" >> ${ENV_FILE}
 echo "PCAP_TO=${PCAP_TIMEOUT_SECS:-0}" >> ${ENV_FILE}
 echo "PCAP_ORDERED=${PCAP_ORDERED:-false}" >> ${ENV_FILE}
 echo "PCAP_CONNTRACK=${PCAP_CONNTRACK:-false}" >> ${ENV_FILE}
-echo "PCAP_TCPDUMP=${PCAP_TCPDUMP:-true}" >> ${ENV_FILE}
-echo "PCAP_JSONDUMP=${PCAP_JSON:-false}" >> ${ENV_FILE}
+echo "PCAP_TCPDUMP=${PCAP_TCPDUMP}" >> ${ENV_FILE}
+echo "PCAP_JSONDUMP=${PCAP_JSONDUMP}" >> ${ENV_FILE}
 echo "PCAP_JSONDUMP_LOG=${PCAP_JSON_LOG:-false}" >> ${ENV_FILE}
 
 # short-rotate-secs == small-pcap-files
@@ -92,6 +93,12 @@ echo "PCAP_PORTS=${PCAP_PORTS:-ALL}" >> ${ENV_FILE}
 # simple filter; comma separated list of lowercase TCP flags that a segment must contain to be captured
 echo "PCAP_TCP_FLAGS=${PCAP_TCP_FLAGS:-ALL}" >> ${ENV_FILE}
 
+if [[ "${PCAP_TCPDUMP}" == true || "${PCAP_JSONDUMP}" == true ]]; then
+  echo "PCAP_FSN_ENABLED=true" >> ${ENV_FILE}
+else
+  echo "PCAP_FSN_ENABLED=false" >> ${ENV_FILE}
+fi
+
 # Create both paths to store PCAP files
 mkdir -pv ${PCAP_MNT}
 mkdir -pv ${PCAP_TMP}
@@ -100,7 +107,10 @@ if [[ "$PCAP_GCS_FUSE" == true ]]; then
   echo "{\"severity\":\"NOTICE\",\"message\":\"PCAP files will be available at: gs://${PCAP_GCS_BUCKET}/${GCS_DIR}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"init\"}"
 fi
 
-cat -n ${ENV_FILE}
+if [[ "${PCAP_DEBUG}" == true ]]; then
+  tcpdump --version
+  cat -n ${ENV_FILE}
+fi
 
 trap 'kill -TERM $PCAP_PID' TERM INT
 /bin/supervisord --configuration=/pcap.conf --env-file=${ENV_FILE} &
