@@ -2,7 +2,8 @@
 
 set +x
 
-if [[ "$PCAP_GCS_FUSE" == true ]]; then
+if [[ "$PCAP_GCS_FUSE" == true && "${PCAP_FSN_ENABLED}" == true ]]; then
+    # only create the PCAP files directory in GCS if FUSE and FSN are both enabled
     while : ; do
         gcsfuse_ready=$(mount | grep --color=never "${PCAP_MNT} type fuse" | wc -l | tr -d '\n')
         [[ "${gcsfuse_ready}" == '1' ]] \
@@ -13,10 +14,8 @@ if [[ "$PCAP_GCS_FUSE" == true ]]; then
     done
 
     mount | grep --color=never "${PCAP_MNT} type fuse"
-else 
-    echo "{\"severity\":\"NOTICE\",\"message\":\"GCS FUSE is disabled\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+    
+    exec mkdir -pv "${PCAP_DIR}"
 fi
 
-set -x
-
-mkdir -pv "${PCAP_DIR}"
+echo "{\"severity\":\"NOTICE\",\"message\":\"GCS export is disabled\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"

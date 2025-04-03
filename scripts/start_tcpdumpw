@@ -2,14 +2,17 @@
 
 set +x
 
-while : ; do
-    pcapfsn_ready=$(ps -efa | grep --color=never '/pcap_fsn' | grep --color=never -v grep | wc -l  | tr -d '\n')
-    [[ "${pcapfsn_ready}" == '1' ]] \
-        && echo "{\"severity\":\"INFO\",\"message\":\"PCAP FS notifier is running\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
-        && break
-    echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP FS notifier to run ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
-    sleep 1
-done
+if [[ "${PCAP_FSN_ENABLED}" == true ]]; then
+    # only wait for PCAP FSN if it is enabled
+    while : ; do
+        pcapfsn_ready=$(ps -efa | grep --color=never '/pcap_fsn' | grep --color=never -v grep | wc -l  | tr -d '\n')
+        [[ "${pcapfsn_ready}" == '1' ]] \
+            && echo "{\"severity\":\"INFO\",\"message\":\"PCAP FS notifier is running\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
+            && break
+        echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP FS notifier to run ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+        sleep 1
+    done
+fi
 
 EPHEMERAL_PORT_RANGE=`cat /proc/sys/net/ipv4/ip_local_port_range | tr '\t' ' ' | tr -s ' ' | tr ' ' ',' | tr -d '\n'`
 
@@ -22,8 +25,10 @@ if [[ "${PCAP_RT_ENV}" == "cloud_run_gen1" ]]; then
     export PCAP_COMPAT='true'
 fi
 
-ls -l /bin/tcpdump
-ls -l /bin/tcpdumpw
+if [[ "${PCAP_DEBUG}" == true ]]; then
+    ls -l /bin/tcpdump
+    ls -l /bin/tcpdumpw
+fi
 
 set -x
 
