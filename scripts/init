@@ -12,33 +12,45 @@ export MDS_CURL="curl -s -H Metadata-Flavor:Google ${MDS_URL}"
 
 INSTANCE_ID=$(${MDS_CURL}/instance/id)
 
-GAE_ENABLED="${PCAP_GAE:-false}"
-echo "PCAP_GAE=${GAE_ENABLED}" >> ${ENV_FILE}
+export PCAP_EXEC_ENV=${PCAP_EXEC_ENV:-run}
 
-if [ "$GAE_ENABLED" = true ] ; then
-  GAE_ENV_FILE="${ENV_FILE}.gae"
-  # discover GAE env by inspecting container `gaeapp`
-  curl -s --unix-socket /docker.sock \
-    '0/containers/gaeapp/json' \
-    | jq -crM '.Config.Env[]' \
-    | grep --color=never -E '^(GAE_|GOOGLE_|GCLOUD_).*' \
-    | sort | uniq > ${GAE_ENV_FILE}
-  source ${GAE_ENV_FILE}
-  export PCAP_EXEC_ENV='gae'
-  export INSTANCE_ID="${INSTANCE_ID}-${GAE_INSTANCE}"
-  export K_SERVICE="${GAE_SERVICE}"
-  export K_REVISION="${GAE_VERSION}"
-  _GCP_ZONE=$(${MDS_CURL}/instance/zone)
-  export GCP_REGION=${_GCP_ZONE##*/}
-  cat ${GAE_ENV_FILE} >> ${ENV_FILE}
-else
-  export PCAP_EXEC_ENV='run'
-  export GOOGLE_CLOUD_PROJECT=$(${MDS_CURL}/project/project-id)
-  export GCLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}"
-  echo "GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}" >> ${ENV_FILE}
-  _GCP_REGION=$(${MDS_CURL}/instance/region)
-  export GCP_REGION=${_GCP_REGION##*/}
-fi
+case "${PCAP_EXEC_ENV}" in
+  gke)
+    echo "PCAP_GKE=true" >> ${ENV_FILE}
+    export GOOGLE_CLOUD_PROJECT=$(${MDS_CURL}/project/project-id)
+    export GCLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}"
+    echo "GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}" >> ${ENV_FILE}
+    export GCP_REGION=$(${MDS_CURL}/instance/attributes/cluster-location)
+    export K_SERVICE=$(${MDS_CURL}/instance/attributes/cluster-name)
+    export K_REVISION=$(${MDS_CURL}/instance/attributes/cluster-uid)
+    ;;
+  gae)
+    echo "PCAP_GAE=true" >> ${ENV_FILE}
+    echo "PCAP_GKE=false" >> ${ENV_FILE}
+    GAE_ENV_FILE="${ENV_FILE}.gae"
+    # discover GAE env by inspecting container `gaeapp`
+    curl -s --unix-socket /docker.sock \
+      '0/containers/gaeapp/json' \
+      | jq -crM '.Config.Env[]' \
+      | grep --color=never -E '^(GAE_|GOOGLE_|GCLOUD_).*' \
+      | sort | uniq > ${GAE_ENV_FILE}
+    source ${GAE_ENV_FILE}
+    export INSTANCE_ID="${INSTANCE_ID}-${GAE_INSTANCE}"
+    export K_SERVICE="${GAE_SERVICE}"
+    export K_REVISION="${GAE_VERSION}"
+    _GCP_ZONE=$(${MDS_CURL}/instance/zone)
+    export GCP_REGION=${_GCP_ZONE##*/}
+    cat ${GAE_ENV_FILE} >> ${ENV_FILE}
+    ;;
+  *)
+    echo "PCAP_GKE=false" >> ${ENV_FILE}
+    export GOOGLE_CLOUD_PROJECT=$(${MDS_CURL}/project/project-id)
+    export GCLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}"
+    echo "GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}" >> ${ENV_FILE}
+    _GCP_REGION=$(${MDS_CURL}/instance/region)
+    export GCP_REGION=${_GCP_REGION##*/}
+
+esac
 
 PCAP_EXT="${PCAP_FILE_EXT:-pcap}"
 PCAP_GZIP="${PCAP_COMPRESS:-true}" # compressing is strongly recommended

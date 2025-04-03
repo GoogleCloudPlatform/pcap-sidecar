@@ -2,6 +2,8 @@
 
 set +x
 
+export PCAP_GAE="${PCAP_GAE:-false}"
+
 while : ; do
     pcapfsn_ready=$(ps -efa | grep --color=never '/pcap_fsn' | grep --color=never -v grep | wc -l  | tr -d '\n')
     [[ "${pcapfsn_ready}" == '1' ]] \

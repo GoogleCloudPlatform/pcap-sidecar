@@ -2,6 +2,8 @@
 
 set +x
 
+export PCAP_GAE="${PCAP_GAE:-false}"
+
 while : ; do
     [[ -d ${PCAP_DIR} ]] \
         && echo "{\"severity\":\"INFO\",\"message\":\"PCAP files directory is now available at: ${PCAP_DIR}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
