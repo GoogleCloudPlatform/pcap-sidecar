@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+echo "PCAP_RUN=false" >> ${ENV_FILE}
+echo "PCAP_GAE=false" >> ${ENV_FILE}
+echo "PCAP_GKE=true" >> ${ENV_FILE}
+
+export GOOGLE_CLOUD_PROJECT=$(${MDS_CURL}/project/project-id)
+export GCLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}"
+
+echo "GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}" >> ${ENV_FILE}
+
+export K_SERVICE=$(${MDS_CURL}/instance/attributes/cluster-name)
+export K_REVISION=$(${MDS_CURL}/instance/attributes/cluster-uid)
+export GCP_REGION=$(${MDS_CURL}/instance/attributes/cluster-location)

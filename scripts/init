@@ -10,47 +10,19 @@ export ENV_FILE='/tcpdump.env'
 export MDS_URL='http://metadata.google.internal/computeMetadata/v1'
 export MDS_CURL="curl -s -H Metadata-Flavor:Google ${MDS_URL}"
 
-INSTANCE_ID=$(${MDS_CURL}/instance/id)
+export INSTANCE_ID=$(${MDS_CURL}/instance/id)
 
 export PCAP_EXEC_ENV=${PCAP_EXEC_ENV:-run}
 
-case "${PCAP_EXEC_ENV}" in
-  gke)
-    echo "PCAP_GKE=true" >> ${ENV_FILE}
-    export GOOGLE_CLOUD_PROJECT=$(${MDS_CURL}/project/project-id)
-    export GCLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}"
-    echo "GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}" >> ${ENV_FILE}
-    export GCP_REGION=$(${MDS_CURL}/instance/attributes/cluster-location)
-    export K_SERVICE=$(${MDS_CURL}/instance/attributes/cluster-name)
-    export K_REVISION=$(${MDS_CURL}/instance/attributes/cluster-uid)
-    ;;
-  gae)
-    echo "PCAP_GAE=true" >> ${ENV_FILE}
-    echo "PCAP_GKE=false" >> ${ENV_FILE}
-    GAE_ENV_FILE="${ENV_FILE}.gae"
-    # discover GAE env by inspecting container `gaeapp`
-    curl -s --unix-socket /docker.sock \
-      '0/containers/gaeapp/json' \
-      | jq -crM '.Config.Env[]' \
-      | grep --color=never -E '^(GAE_|GOOGLE_|GCLOUD_).*' \
-      | sort | uniq > ${GAE_ENV_FILE}
-    source ${GAE_ENV_FILE}
-    export INSTANCE_ID="${INSTANCE_ID}-${GAE_INSTANCE}"
-    export K_SERVICE="${GAE_SERVICE}"
-    export K_REVISION="${GAE_VERSION}"
-    _GCP_ZONE=$(${MDS_CURL}/instance/zone)
-    export GCP_REGION=${_GCP_ZONE##*/}
-    cat ${GAE_ENV_FILE} >> ${ENV_FILE}
-    ;;
-  *)
-    echo "PCAP_GKE=false" >> ${ENV_FILE}
-    export GOOGLE_CLOUD_PROJECT=$(${MDS_CURL}/project/project-id)
-    export GCLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}"
-    echo "GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}" >> ${ENV_FILE}
-    _GCP_REGION=$(${MDS_CURL}/instance/region)
-    export GCP_REGION=${_GCP_REGION##*/}
-
-esac
+PCAP_ENV_INIT_SCRIPT="/scripts/init_${PCAP_EXEC_ENV}"
+if [[ -s ${PCAP_ENV_INIT_SCRIPT}  ]]; then
+  echo "{\"severity\":\"INFO\",\"message\":\"PCAP_EXEC_ENV => ${PCAP_EXEC_ENV}\"}"
+  source ${PCAP_ENV_INIT_SCRIPT}
+else 
+  # see: http://cloud/logging/docs/reference/v2/rest/v2/LogEntry#LogSeverity
+  echo "{\"severity\":\"CRITICAL\",\"message\":\"invalid value for PCAP_EXEC_ENV => ${PCAP_EXEC_ENV}\"}"
+  exit
+fi
 
 PCAP_EXT="${PCAP_FILE_EXT:-pcap}"
 PCAP_GZIP="${PCAP_COMPRESS:-true}" # compressing is strongly recommended
@@ -84,7 +56,6 @@ echo "APP_REVISION=${K_REVISION}" >> ${ENV_FILE}
 echo "APP_VERSION=${K_REVISION}" >> ${ENV_FILE}
 echo "INSTANCE_ID=${INSTANCE_ID}" >> ${ENV_FILE}
 echo 'APP_SIDECAR=tcpdump' >> ${ENV_FILE}
-echo "GCS_DIR=${GCS_DIR}" >> ${ENV_FILE}
 echo "PCAP_EXT=${PCAP_EXT}" >> ${ENV_FILE}
 echo "PCAP_GZIP=${PCAP_GZIP}" >> ${ENV_FILE}
 echo "PCAP_DATE=${PCAP_DATE}" >> ${ENV_FILE}
@@ -93,8 +64,12 @@ echo "PCAP_TMP=${PCAP_TMP}" >> ${ENV_FILE}
 echo "PCAP_FILE=${PCAP_FILE}" >> ${ENV_FILE}
 echo "PCAP_DIR=${PCAP_DIR}" >> ${ENV_FILE}
 
+echo "PCAP_GCS_FUSE=${PCAP_GCS_FUSE:-true}" >> ${ENV_FILE}
 echo "PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET}" >> ${ENV_FILE}
+echo "PCAP_GCS_DIR=${GCS_DIR}" >> ${ENV_FILE}
+echo "GCS_DIR=${GCS_DIR}" >> ${ENV_FILE}
 echo "GCS_BUCKET=${PCAP_GCS_BUCKET}" >> ${ENV_FILE}
+
 echo "PCAP_IFACE=${PCAP_IFACE:-eth}" >> ${ENV_FILE}
 echo "PCAP_SECS=${PCAP_SECS}" >> ${ENV_FILE}
 echo "PCAP_SNAPLEN=${PCAP_SNAPLEN}" >> ${ENV_FILE}
@@ -102,16 +77,15 @@ echo "PCAP_USE_CRON=${PCAP_USE_CRON:-false}" >> ${ENV_FILE}
 echo "PCAP_CRON_EXP=${PCAP_CRON_EXP:--}" >> ${ENV_FILE}
 echo "PCAP_TZ=${PCAP_TIMEZONE:-UTC}" >> ${ENV_FILE}
 echo "PCAP_TO=${PCAP_TIMEOUT_SECS:-0}" >> ${ENV_FILE}
-
 echo "PCAP_ORDERED=${PCAP_ORDERED:-false}" >> ${ENV_FILE}
 echo "PCAP_CONNTRACK=${PCAP_CONNTRACK:-false}" >> ${ENV_FILE}
+
 echo "PCAP_TCPDUMP=${PCAP_TCPDUMP:-true}" >> ${ENV_FILE}
-echo "PCAP_JSONDUMP=${PCAP_JSONDUMP}" >> ${ENV_FILE}
-echo "PCAP_JSONDUMP_LOG=${PCAP_JSONDUMP_LOG}" >> ${ENV_FILE}
+echo "PCAP_JSONDUMP=${PCAP_JSONDUMP:-false}" >> ${ENV_FILE}
+echo "PCAP_JSONDUMP_LOG=${PCAP_JSONDUMP_LOG:-false}" >> ${ENV_FILE}
 
 # healtch check TCP port
 echo "PCAP_HC_PORT=${PCAP_HC_PORT:-12345}" >> ${ENV_FILE}
-
 
 # free style BPF filter aka complex filter, if defined: no simple filters will be applied
 echo "PCAP_FILTER=${PCAP_FILTER:-DISABLED}" >> ${ENV_FILE}

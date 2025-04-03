@@ -13,17 +13,25 @@ set -xm
 
 # delay GCS FUSE termination by 10s to allow remaining PCAP files to be flushed
 trap 'sleep 8; kill -TERM $GCS_FUSE_PID' TERM INT
-${GCSFUSE_BIN} -o rw \
-  --app-name=tcpdump \
-  --dir-mode=777 --file-mode=777 \
-  --log-file=/dev/stdout \
-  --log-format=text \
-  --foreground \
-  ${PCAP_GCS_BUCKET} ${PCAP_MNT} &
-export GCS_FUSE_PID=$!
 
-echo "[INFO] – GCS FUSE started w/PID: ${GCS_FUSE_PID}"
-wait ${GCS_FUSE_PID}
-trap - TERM INT
-wait ${GCS_FUSE_PID}
-echo "[INFO] – GCS FUSE ( PID: ${GCS_FUSE_PID} ) exited"
+if [[ "$PCAP_GCS_FUSE" == true ]]; then
+  ${GCSFUSE_BIN} -o rw \
+    --app-name=tcpdump \
+    --dir-mode=777 --file-mode=777 \
+    --log-file=/dev/stdout \
+    --log-format=text \
+    --foreground \
+    ${PCAP_GCS_BUCKET} ${PCAP_MNT} &
+
+  export GCS_FUSE_PID=$!
+  
+  echo "{\"severity\":\"INFO\",\"message\":\"GCS FUSE started w/PID: ${GCS_FUSE_PID}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+  wait ${GCS_FUSE_PID}
+  trap - TERM INT
+  wait ${GCS_FUSE_PID}
+  echo "{\"severity\":\"INFO\",\"message\":\"GCS FUSE ( PID: ${GCS_FUSE_PID} ) exited\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+  exit 0
+fi
+
+echo "{\"severity\":\"NOTICE\",\"message\":\"GCS FUSE was not started\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+exec sleep infinity

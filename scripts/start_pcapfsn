@@ -12,7 +12,7 @@ while : ; do
     sleep 1
 done
 
-if [ "$PCAP_JSONDUMP" = true ] ; then
+if [[ "$PCAP_JSONDUMP" == true ]]; then
     PCAP_EXT="${PCAP_EXT},json"
 fi
 
