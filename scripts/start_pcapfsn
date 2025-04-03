@@ -2,8 +2,6 @@
 
 set +x
 
-export PCAP_GAE="${PCAP_GAE:-false}"
-
 while : ; do
     [[ -d ${PCAP_DIR} ]] \
         && echo "{\"severity\":\"INFO\",\"message\":\"PCAP files directory is now available at: ${PCAP_DIR}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
@@ -21,21 +19,29 @@ if [[ "${PCAP_RT_ENV}" == "cloud_run_gen1" ]]; then
     export PCAP_COMPAT='true'
 fi
 
-ls -l /bin/pcap_fsn
 
-set -x
+if [[ "${PCAP_TCPDUMP}" == true || "${PCAP_JSONDUMP}" == true ]]; then
+    set -x
 
-ls -l "${PCAP_DIR}"
+    ls -l "${PCAP_DIR}"
 
-# `exec` allows `/bin/pcap_fsn` to receive signals directly
-exec env /bin/pcap_fsn \
-    -src_dir=${PCAP_TMP} \
-    -gcs_dir=${PCAP_DIR} \
-    -pcap_ext="${PCAP_EXT}" \
-    -gzip="${PCAP_GZIP:-true}" \
-    -interval="${PCAP_SECS:-60}" \
-    -gae=${PCAP_GAE} \
-    -retries_max="${PCAP_FSN_RETRIES_MAX:-6}" \
-    -retries_delay="${PCAP_FSN_RETRIES_DELAY:-2}" \
-    -compat="${PCAP_COMPAT:-false}" \
-    -rt_env="${PCAP_RT_ENV:-cloud_run_gen2}"
+    # `exec` allows `/bin/pcap_fsn` to receive signals directly
+    exec env /bin/pcap_fsn \
+        -debug="${PCAP_DEBUG:-false}" \
+        -env="${PCAP_EXEC_ENV:-run}" \
+        -run=${PCAP_RUN:-true} \
+        -gae=${PCAP_GAE:-false} \
+        -gke=${PCAP_GKE:-false} \
+        -src_dir=${PCAP_TMP} \
+        -gcs_dir=${PCAP_DIR} \
+        -pcap_ext="${PCAP_EXT}" \
+        -gzip="${PCAP_GZIP:-true}" \
+        -interval="${PCAP_SECS:-60}" \
+        -retries_max="${PCAP_FSN_RETRIES_MAX:-6}" \
+        -retries_delay="${PCAP_FSN_RETRIES_DELAY:-2}" \
+        -compat="${PCAP_COMPAT:-false}" \
+        -rt_env="${PCAP_RT_ENV:-cloud_run_gen2}"
+else
+    echo "{\"severity\":\"NOTICE\",\"message\":\"not exporting PCAP files to GCS\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+    exec sleep infinity
+fi

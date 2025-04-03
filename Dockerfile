@@ -25,7 +25,7 @@ USER 0:0
 
 COPY ./bin /bin
 COPY ./scripts /scripts
-COPY ./tcpdump.conf /tcpdump.conf
+COPY ./pcap.conf /pcap.conf
 
 COPY ./env/${PCAP_RT_ENV}.env /env/rt.env
 

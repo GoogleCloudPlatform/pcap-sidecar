@@ -76,12 +76,16 @@ var (
 	gcs_dir       = flag.String("gcs_dir", "/pcap", "pcaps destination directory")
 	pcap_ext      = flag.String("pcap_ext", "pcap", "pcap files extension")
 	gzip_pcaps    = flag.Bool("gzip", false, "compress pcap files")
-	gcp_gae       = flag.Bool("gae", false, "define serverless execution environment")
+	gcp_env       = flag.String("env", "run", "literal ID of the execution environment; any of: run, gae, gke")
+	gcp_run       = flag.Bool("run", true, "Cloud Run execution environment")
+	gcp_gae       = flag.Bool("gae", false, "App Engine execution environment")
+	gcp_gke       = flag.Bool("gke", false, "Kubernetes Engine execution environment")
 	interval      = flag.Uint("interval", 60, "seconds after which tcpdump rotates PCAP files")
 	retries_max   = flag.Uint("retries_max", 5, "times a failed copy-to-GCS operation should be retried")
 	retries_delay = flag.Uint("retries_delay", 2, "seconds between retries for copy-to-GCS operations")
 	compat        = flag.Bool("compat", false, "apply filters in Cloud Run gen1 mode")
 	rt_env        = flag.String("rt_env", "cloud_run_gen2", "runtime where PCAP sidecar is used")
+	pcap_debug    = flag.Bool("debug", false, "enable debug logs")
 )
 
 var (
@@ -506,9 +510,6 @@ func main() {
 				_, memFlushErr := flushBuffers()
 				memoryAfter, _ := getCurrentMemoryUtilization(isGAE)
 				if memFlushErr != nil {
-					logEvent(zapcore.WarnLevel,
-						fmt.Sprintf("failed to flush OS file write buffers: [memory=%d] | %+v",
-							memoryAfter, memFlushErr), PCAP_OSWMEM, nil, memFlushErr)
 					continue
 				}
 				releasedMemory := int64(memoryBefore) - int64(memoryAfter)

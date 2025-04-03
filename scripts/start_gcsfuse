@@ -9,12 +9,12 @@ if [[ "${PCAP_RT_ENV}" == "cloud_run_gen1" ]]; then
   export GCSFUSE_BIN='/bin/gcsfuse'
 fi
 
-set -xm
-
-# delay GCS FUSE termination by 10s to allow remaining PCAP files to be flushed
-trap 'sleep 8; kill -TERM $GCS_FUSE_PID' TERM INT
-
 if [[ "$PCAP_GCS_FUSE" == true ]]; then
+  set -xm
+  
+  # delay GCS FUSE termination by 10s to allow remaining PCAP files to be flushed
+  trap 'sleep 8; kill -TERM $GCS_FUSE_PID' TERM INT
+
   ${GCSFUSE_BIN} -o rw \
     --app-name=tcpdump \
     --dir-mode=777 --file-mode=777 \
