@@ -33,5 +33,5 @@ if [[ "$PCAP_GCS_FUSE" == true ]]; then
   exit 0
 fi
 
-echo "{\"severity\":\"NOTICE\",\"message\":\"GCS FUSE was not started\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+echo "{\"severity\":\"NOTICE\",\"message\":\"GCS FUSE is disabled\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
 exec sleep infinity

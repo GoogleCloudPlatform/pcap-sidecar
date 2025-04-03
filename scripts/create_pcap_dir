@@ -2,16 +2,20 @@
 
 set +x
 
-while : ; do
-    gcsfuse_ready=$(mount | grep --color=never "${PCAP_MNT} type fuse" | wc -l | tr -d '\n')
-    [[ "${gcsfuse_ready}" == '1' ]] \
-        && echo "{\"severity\":\"INFO\",\"message\":\"GCS Bucket ${PCAP_GCS_BUCKET} is now mounted at ${PCAP_MNT}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
-        && break
-    echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for GCS Bucket ${PCAP_GCS_BUCKET} to be mounted at ${PCAP_MNT} ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
-    sleep 1
-done
+if [[ "$PCAP_GCS_FUSE" == true ]]; then
+    while : ; do
+        gcsfuse_ready=$(mount | grep --color=never "${PCAP_MNT} type fuse" | wc -l | tr -d '\n')
+        [[ "${gcsfuse_ready}" == '1' ]] \
+            && echo "{\"severity\":\"INFO\",\"message\":\"GCS Bucket ${PCAP_GCS_BUCKET} is now mounted at ${PCAP_MNT}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
+            && break
+        echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for GCS Bucket ${PCAP_GCS_BUCKET} to be mounted at ${PCAP_MNT} ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+        sleep 1
+    done
 
-mount | grep --color=never "${PCAP_MNT} type fuse"
+    mount | grep --color=never "${PCAP_MNT} type fuse"
+else 
+    echo "{\"severity\":\"NOTICE\",\"message\":\"GCS FUSE is disabled\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+fi
 
 set -x
 
