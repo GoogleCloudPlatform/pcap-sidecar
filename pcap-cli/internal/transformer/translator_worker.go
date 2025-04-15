@@ -131,6 +131,13 @@ var (
 		layers.LayerTypeUDP:      packetLayerTranslators[2][3],
 		layers.LayerTypeDNS:      packetLayerTranslators[3][0],
 		layers.LayerTypeTLS:      packetLayerTranslators[3][1],
+		layers.LayerTypeARP: func(
+			ctx context.Context,
+			w *pcapTranslatorWorker,
+			deep bool,
+		) fmt.Stringer {
+			return w.translateARPLayer(ctx, deep)
+		},
 		layers.LayerTypeICMPv6Echo: func(
 			ctx context.Context,
 			w *pcapTranslatorWorker,

@@ -56,12 +56,14 @@ type (
 )
 
 const (
-	jsonTranslationSummary          = "#:{serial} | @:{ifaceIndex}/{ifaceName} | flow:{flowID} | "
-	jsonTranslationSummaryWithoutL4 = jsonTranslationSummary + "{L3Src} > {L3Dst}"
-	jsonTranslationSummaryICMP      = jsonTranslationSummary + "ICMPv{icmpVersion} | {L3Src} > {L3Dst} | {icmpMessage}"
-	jsonTranslationSummaryUDP       = jsonTranslationSummary + "{L4Proto} | {srcProto}/{L3Src}:{L4Src} > {dstProto}/{L3Dst}:{L4Dst}"
-	jsonTranslationSummaryTCP       = jsonTranslationSummaryUDP + " | [{tcpFlags}] | len/seq/ack:{tcpLen}/{tcpSeq}/{tcpAck}"
 	jsonTranslationFlowTemplate     = "{0}/iface/{1}/flow/{2}:{3}"
+	jsonTranslationTemplate         = "#{serial} | @{ifaceIndex}/{ifaceName}"
+	jsonTranslationSummary          = jsonTranslationTemplate + " | flow:{flowID}"
+	jsonTranslationSummaryWithoutL4 = jsonTranslationSummary + " | {L3Src} > {L3Dst}"
+	jsonTranslationSummaryARP       = jsonTranslationSummary + " | ARP | {L3Src} > {L3Dst}"
+	jsonTranslationSummaryICMP      = jsonTranslationSummary + " | ICMPv{icmpVersion} | {L3Src} > {L3Dst} | {icmpMessage}"
+	jsonTranslationSummaryUDP       = jsonTranslationSummary + " | {L4Proto} | {srcProto}/{L3Src}:{L4Src} > {dstProto}/{L3Dst}:{L4Dst}"
+	jsonTranslationSummaryTCP       = jsonTranslationSummaryUDP + " | [{tcpFlags}] | len/seq/ack:{tcpLen}/{tcpSeq}/{tcpAck}"
 )
 
 func init() {
@@ -162,7 +164,7 @@ func newError(
 	errJSON, _ := errors.ObjectI(0)
 	errJSON.Set(err.Error(), "msg")
 
-	json.Set("severity", "ERROR")
+	json.Set("ERROR", "severity")
 
 	// return only the error for caller to hydrate.
 	return json, errJSON
@@ -731,6 +733,7 @@ func (t *JSONPcapTranslator) translateDNSLayer(ctx context.Context, dns *layers.
 
 	domain.Set(dns.QDCount, "questions_count")
 	domain.Set(dns.ANCount, "answers_count")
+
 	/*
 		json.SetP(dns.NSCount, "DNS.authorities_count")
 		json.SetP(dns.ARCount, "DNS.additionals_count")
@@ -754,56 +757,79 @@ func (t *JSONPcapTranslator) translateDNSLayer(ctx context.Context, dns *layers.
 		a.Set(answer.Class.String(), "class")
 		a.Set(answer.TTL, "ttl")
 
-		if answer.IP != nil {
-			a.Set(answer.IP.String(), "ip")
+		switch answer.Type {
+
+		case layers.DNSTypeA:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L908-L909
+			a.Set(answer.IP.String(), "A")
+
+		case layers.DNSTypeAAAA:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L910-L911
+			a.Set(answer.IP.String(), "AAAA")
+
+		case layers.DNSTypeNS:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L919-L924
+			a.Set(string(answer.NS), "NS")
+
+		case layers.DNSTypeCNAME:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L925-L930
+			a.Set(string(answer.CNAME), "CNAME")
+
+		case layers.DNSTypePTR:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L931-L936
+			a.Set(string(answer.PTR), "PTR")
+
+		case layers.DNSTypeSOA:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L937-L955
+			soaJSON, _ := a.Object("SOA")
+			soaJSON.Set(string(answer.SOA.MName), "mname")
+			soaJSON.Set(string(answer.SOA.RName), "rname")
+			soaJSON.Set(answer.SOA.Serial, "serial")
+			soaJSON.Set(answer.SOA.Expire, "expire")
+			soaJSON.Set(answer.SOA.Refresh, "refresh")
+			soaJSON.Set(answer.SOA.Retry, "retry")
+
+		case layers.DNSTypeSRV:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L973-L984
+			srvJSON, _ := a.Object("SRV")
+			srvJSON.SetP(string(answer.SRV.Name), "name")
+			srvJSON.SetP(answer.SRV.Port, "port")
+			srvJSON.SetP(answer.SRV.Weight, "weight")
+			srvJSON.SetP(answer.SRV.Priority, "priority")
+
+		case layers.DNSTypeMX:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L956-L965
+			mxJSON, _ := a.Object("MX")
+			mxJSON.SetP(string(answer.MX.Name), "name")
+			mxJSON.SetP(answer.MX.Preference, "preference")
+
+		case layers.DNSTypeURI:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L966-L972
+			uriJSON, _ := a.Object("URI")
+			uriJSON.SetP(string(answer.URI.Target), "target")
+			uriJSON.SetP(answer.URI.Priority, "priority")
+			uriJSON.SetP(answer.URI.Weight, "weight")
+
+		// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L912-L918
+		case layers.DNSTypeTXT:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L864-L875
+			txts, _ := a.ArrayOfSize(len(answer.TXTs))
+			for i, txt := range answer.TXTs {
+				txts.SetIndex(string(txt), i)
+			}
+
+		// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L985-L990
+		case layers.DNSTypeOPT:
+			// see: https://github.com/google/gopacket/blob/master/layers/dns.go#L877-L903
+			opts, _ := a.ArrayOfSize(len(answer.OPT), "OPT")
+			for i, opt := range answer.OPT {
+				o, _ := opts.ObjectI(i)
+				o.Set(opt.Code.String(), "code")
+				o.Set(string(opt.Data), "data")
+			}
+
 		}
 
-		if answer.NS != nil && len(answer.NS) > 0 {
-			a.Set(string(answer.NS), "ns")
-		}
-
-		if answer.CNAME != nil && len(answer.CNAME) > 0 {
-			a.Set(string(answer.CNAME), "cname")
-		}
-
-		if answer.PTR != nil && len(answer.PTR) > 0 {
-			a.Set(string(answer.PTR), "ptr")
-		}
-
-		txts, _ := a.ArrayOfSize(len(answer.TXTs))
-		for i, txt := range answer.TXTs {
-			txts.SetIndex(string(txt), i)
-		}
-
-		soaJSON, _ := a.Object("SOA")
-		soaJSON.Set(string(answer.SOA.MName), "mname")
-		soaJSON.Set(string(answer.SOA.RName), "rname")
-		soaJSON.Set(answer.SOA.Serial, "serial")
-		soaJSON.Set(answer.SOA.Expire, "expire")
-		soaJSON.Set(answer.SOA.Refresh, "refresh")
-		soaJSON.Set(answer.SOA.Retry, "retry")
-
-		srvJSON, _ := a.Object("SRV")
-		srvJSON.SetP(string(answer.SRV.Name), "name")
-		srvJSON.SetP(answer.SRV.Port, "port")
-		srvJSON.SetP(answer.SRV.Weight, "weight")
-		srvJSON.SetP(answer.SRV.Priority, "priority")
-
-		/*
-			a.SetP(string(answer.MX.Name), "mx.name")
-			a.SetP(answer.MX.Preference, "mx.preference")
-
-			a.SetP(string(answer.URI.Target), "uri.target")
-			a.SetP(answer.URI.Priority, "uri.priority")
-			a.SetP(answer.URI.Weight, "uri.weight")
-		*/
-
-		opts, _ := a.ArrayOfSize(len(answer.OPT), "opt")
-		for i, opt := range answer.OPT {
-			o, _ := opts.ObjectI(i)
-			o.Set(opt.Code.String(), "code")
-			o.Set(string(opt.Data), "data")
-		}
 	}
 
 	return json
@@ -862,23 +888,26 @@ func (t *JSONPcapTranslator) finalize(
 
 			t.checkL3Address(ctx, json, data, ifaces, iface, l3Src, l3Dst)
 
-			if arpFlowIDstr, arpOK := json.S("ASP", "flow").Data().(string); arpOK {
+			if arpFlowIDstr, arpOK := json.S("ARP", "flow").Data().(string); arpOK {
 				arpFlowID, _ := strconv.ParseUint(arpFlowIDstr, 10, 64)
 				flowID = fnv1a.AddUint64(flowID, arpFlowID)
 				flowIDstr = strconv.FormatUint(flowID, 10)
 
 				data["flowID"] = flowIDstr
 				json.Set(flowIDstr, "flow")
+			} else {
+				data["flowID"] = "0"
+				json.Set("0", "flow")
 			}
 
 			operation.Set(stringFormatter.Format(jsonTranslationFlowTemplate, id, t.iface.Name, "arp", flowIDstr), "id")
-			json.Set(stringFormatter.FormatComplex(jsonTranslationSummaryWithoutL4, data), "message")
+			json.Set(stringFormatter.FormatComplex(jsonTranslationSummaryARP, data), "message")
 
 			return json, nil
 		}
 
 		operation.Set(stringFormatter.Format(jsonTranslationFlowTemplate, id, t.iface.Name, "l2", flowIDstr), "id")
-		json.Set(stringFormatter.FormatComplex(jsonTranslationSummary, data), "message")
+		json.Set(stringFormatter.FormatComplex(jsonTranslationTemplate, data), "message")
 
 		return json, nil
 	}
