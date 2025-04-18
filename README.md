@@ -28,7 +28,7 @@ The sidecar approach enables decoupling from the main –_ingress_– container 
     - Report errors at `HTTP/1.1` message and `HTTP/2` frames analysis.
   - Packet linking query analysis via flow ID ( 5-tuple ) and Cloud Trace ID.
 - Exports pcap files to Google Cloud Storage (GCS)
-  - Support `.json` and `.pcap` file formats with optional gzip compression
+  - Support `.json` and `.pcap` file formats with optional gzip compression.
   - Graceful handling of `SIGTERM` to ensure all completed pcap files are flushed to GCS before container exits.
 - Packet capture configurability:
   - `tcpdump` filter, interface, snapshot length, pcap file rotation duration.
@@ -86,8 +86,8 @@ The pcap sidecar has images that are compatible with both [Cloud Run execution e
 
    ```sh
    export PROJECT_ID='...'             # GCP Project ID
-   export SERVICE_NAME='...'           # Cloud Run or App Engine Flex service name
-   export SERVICE_REGION='...'         # GCP Region: https://cloud.google.com/about/locations
+   export SERVICE_NAME='...'           # Cloud Run service name
+   export SERVICE_REGION='...'         # GCP Region: https://cloud.google.com/run/docs/locations
    export SERVICE_ACCOUNT='...'        # Cloud Run service's identity.
    export INGRESS_CONTAINER_NAME='...' # the name of the ingress container i/e: `app`.
    export INGRESS_IMAGE_URI='...'
@@ -97,16 +97,15 @@ The pcap sidecar has images that are compatible with both [Cloud Run execution e
    # public image compatible with both gen1 & gen2. Alternatively build your own
    export PCAP_SIDECAR_IMAGE_URI='us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar:latest'
 
-   export PCAP_IFACE='eth'             # prefix of the interface in which packets should be captured from ( for Cloud Run gen1 it must be `any` ).
    export PCAP_GCS_BUCKET='...'        # the name of the Cloud Storage Bucket to mount.
-   export PCAP_FILTER='...'            # the BPF filter to use; i/e: `tcp port 443`.
+   export PCAP_L4_PROTOS='...'         # transport layer protocols to filter on i/e: `tcp`
    export PCAP_JSON_LOG=true           # set to `true` for writting structured logs into Cloud Logging.
    ```
 
-2. Deploy the Cloud Run service including the `tcpdump` sidecar:
+2. Deploy the Cloud Run service including the `pcap` sidecar:
 
 > [!NOTE]  
-> If adding the `tcpdump` sidecar to a preexisting Cloud Run service that is a single container service the gcloud command will fail.
+> If adding the `pcap` sidecar to a preexisting Cloud Run service that is a single container service the gcloud command will fail.
 >
 > You will need to instead make these updates via the Cloud Console or create a new Cloud Run service.
 
@@ -121,18 +120,18 @@ gcloud run deploy ${SERVICE_NAME} \
   --container=${PCAP_SIDECAR_NAME} \
   --image=${PCAP_SIDECAR_IMAGE_URI} \
   --cpu=1 --memory=1G \
-  --set-env-vars="PCAP_IFACE=${PCAP_IFACE},PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET},PCAP_FILTER=${PCAP_FILTER},PCAP_JSON_LOG=${PCAP_JSON_LOG}"
+  --set-env-vars="PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET},PCAP_L4_PROTOS=${PCAP_L4_PROTOS},PCAP_JSON_LOG=${PCAP_JSON_LOG}"
 ```
 
 > See the full list of available flags for `gcloud run deploy` at https://cloud.google.com/sdk/gcloud/reference/run/deploy
 
 ## Final setup
 
-### Configure tcpdump sidecar healthchecks
+### Configure pcap sidecar healthchecks
 
 1. In order to troubleshoot network conditions happening on container startup, any container may to depend on the **PCAP sidecar**. To make all containers depend on the **PCAP sidecar**, edit the Cloud Run service via the Cloud Console and make all other containers depend on the **PCAP sidecar**.
 
-2. Add the following TCP startup probe healthcheck to the `tcpdump` sidecar:
+2. Add the following TCP startup probe healthcheck to the `pcap` sidecar:
 
    ```yaml
    startupProbe:
@@ -146,7 +145,7 @@ gcloud run deploy ${SERVICE_NAME} \
 > [!NOTE]
 > This configuration is not available via gcloud due to needing to configure healthchecks for the sidecar containers.
 >
-> You can optionally choose a different port by setting `PCAP_HC_PORT` as an env var of the `tcpdump` sidecar
+> You can optionally choose a different port by setting `PCAP_HC_PORT` as an env var of the `pcap` sidecar
 
 ### Configure Cloud Storage Bucket for PCAP file upload
 
@@ -156,17 +155,32 @@ gcloud run deploy ${SERVICE_NAME} \
 
 The **PCAP sidecar** accepts the following environment variables:
 
-- `PCAP_IFACE`: (STRING, **required**) a prefix for the interface to perform packet capturing on; i/e: `eth`, `ens`...
+**Output format controls:**
+
+- `PCAP_GCS_BUCKET`: (STRING, **required**) the name of the Cloud Storage Bucket to be mounted and used to store **PCAP files**. Ensure that you provide the runtime service account the `roles/storage.admin` so that it may create objects and read bucket metadata.
+
+- `PCAP_JSON_LOG`: (BOOLEAN, _optional_) wheter to write `JSON` translated packets into `stdout` ( `PCAP_JSON` may not be enabled ); default value is `false`.
+
+  > This is useful when [`Wireshark`](https://www.wireshark.org/) is not available, as it makes it possible to have all captured packets available in [**Cloud Logging**](https://cloud.google.com/logging/docs/structured-logging)
+
+- `PCAP_TCPDUMP`: (BOOLEAN, _required_) whether to use `tcpdump` or not ( `tcpdump` will generate pcap files, if not `PCAP_JSON` must be enabled ) and push those `.pcap` files to GCS; default valie is `true`.
+
+- `PCAP_JSON`: (BOOLEAN, _optional_) whether to use `JSON` to dump packets or not into GCS ; default value is `false`.
+
+  > `PCAP_TCPDUMP` and `PCAP_JSON` maybe be both `true` in order to generate both: `.pcap` and `.json` **PCAP files** that are stored in GCS.
+
+**Packet capturing filters:**
+
+- `PCAP_IFACE`: (STRING, _optional_) a prefix for the interface to perform packet capturing on; i/e: `eth`, `ens`...
 
   > Notice that `PCAP_IFACE` is not the full interface name nor a regex or a pattern, but a prefix; so `eth0` becomes `eth`, and `ens4` becomes `ens`.
 
   > For **Cloud Run gen1** the value of this environment variable will always be `any`.
+  > For **Cloud Run gen2** the value of this environment variable defaults to `eth`.
 
-- `PCAP_GCS_BUCKET`: (STRING, **required**) the name of the Cloud Storage Bucket to be mounted and used to store **PCAP files**. Ensure that you provide the runtime service account the `roles/storage.admin` so that it may create objects and read bucket metadata.
+- `PCAP_L3_PROTOS`: (STRING, _optional_) comma separated list of network layer protocols; default value is `ipv4,ipv6`. Example: `ipv4,ipv6,arp`
 
-- `PCAP_L3_PROTOS`: (STRING, _optional_) comma separated list of network layer protocols; default value is `ipv4,ipv6`.
-
-- `PCAP_L4_PROTOS`: (STRING, _optional_) comma separated list of transport layer protocols; default value is `tcp,udp`.
+- `PCAP_L4_PROTOS`: (STRING, _optional_) comma separated list of transport layer protocols; default value is `tcp,udp`. Example: `tcp,udp,icmp,icmp6`
 
 - `PCAP_IPV4`: (STRING, _optional_) comma separated list of IPv4 addresses or IPv4 networks using CIDR notation; default value is `DISABLED`. Example: `127.0.0.1,127.0.0.1/32`.
 
@@ -177,6 +191,15 @@ The **PCAP sidecar** accepts the following environment variables:
 - `PCAP_PORTS`: (STRING, _optional_) comma separated list of translport layer addresses (UDP or TCP ports) to capture traffic to/from; default value is `ALL`. Example: `80,443`.
 
 - `PCAP_TCP_FLAGS`: (STRING, _optional_) comma separated list of lowercase TCP flags that a segment must contain for it to be captured; default value is `ANY`. Example: `syn,rst`.
+
+### Advanced configurations
+
+More advanced use cases may benefit from scheduling `tcpdump` executions. Use the following environment variables to configure scheduling:
+
+- `PCAP_FILTER`: (STRING, _optional_) standard `tcpdump` BPF filters to scope the packet capture to specific traffic; i/e: `tcp`. Its default value is `DISABLED`.
+
+  > **`PCAP_FILTER`** is not available for **Cloud Run gen1**; use simple filters instead.
+  > **`PCAP_FILTER`** will overwrite anything set in the `PCAP_L3_PROTOS`,`PCAP_L4_PROTOS`,`PCAP_IPV4`,`PCAP_IPV6`,`PCAP_HOSTS`,`PCAP_PORTS`, and `PCAP_TCP_FLAGS` configurations
 
 - `PCAP_SNAPSHOT_LENGTH`: (NUMBER, _optional_) bytes of data from each packet rather than the default of 262144 bytes; default value is `65536`. For more details see https://www.tcpdump.org/manpages/tcpdump.1.html#:~:text=%2D%2D-,snapshot%2Dlength,-%3Dsnaplen
 
@@ -189,30 +212,6 @@ The **PCAP sidecar** accepts the following environment variables:
 - `PCAP_FILE_EXT`: (STRING, _optional_) extension to be used for **PCAP files**; default value is `pcap`.
 
 - `PCAP_COMPRESS`: (BOOLEAN, _optional_) whether to compress **PCAP files** or not; default value is `true`.
-
-- `PCAP_TCPDUMP`: (BOOLEAN, _required_) whether to use `tcpdump` or not ( `tcpdump` will generate pcap files, if not `PCAP_JSON` must be enabled ) and push those `.pcap` files to GCS; default valie is `true`.
-
-- `PCAP_JSON`: (BOOLEAN, _optional_) whether to use `JSON` to dump packets or not into GCS ; default value is `false`.
-
-  > `PCAP_TCPDUMP` and `PCAP_JSON` maybe be both `true` in order to generate both: `.pcap` and `.json` **PCAP files** that are stored in GCS.
-
-- `PCAP_JSON_LOG`: (BOOLEAN, _optional_) wheter to write `JSON` translated packets into `stdout` ( `PCAP_JSON` may not be enabled ); default value is `false`.
-
-  > This is useful when [`Wireshark`](https://www.wireshark.org/) is not available, as it makes it possible to have all captured packets available in [**Cloud Logging**](https://cloud.google.com/logging/docs/structured-logging)
-
-- `PCAP_ORDERED`: (BOOLEAN, _optional_) when `PCAP_JSON` or `PCAP_JSON_LOG` are enabled, wheter to print packets in captured order ( if set to `false`, packet will be written as fast as possible ); default value is `false`.
-
-  > In order to improve performance, packets are translated and written concurrently; when `PCAP_ORDERED` is enabled, only translations are performed concurrently. Enabling `PCAP_ORDERED` may cause packet capturing to be slower, so it is recommended to keep it disabled as all translated packets have a `pcap.num` property to assert order.
-
-- `PCAP_HC_PORT`: (NUMBER, _optional_) the TCP port that should be used to accept startup probes; connections will only be accepted when packet capturing is ready; default value is `12345`.
-
-### Advanced configurations
-
-More advanced use cases may benefit from scheduling `tcpdump` executions. Use the following environment variables to configure scheduling:
-
-- `PCAP_FILTER`: (STRING, _optional_) standard `tcpdump` BPF filters to scope the packet capture to specific traffic; i/e: `tcp`. Its default value is `DISABLED`.
-
-  > **`PCAP_FILTER`** is not available for **Cloud Run gen1**; use simple filters instead.
 
 - `PCAP_USE_CRON`: (BOOLEAN, _optional_) whether to enable scheduling of `tcpdump` executions; default value is `false`.
 
@@ -229,6 +228,12 @@ More advanced use cases may benefit from scheduling `tcpdump` executions. Use th
 - **`PCAP_COMPAT`**: (BOOLEAN, _optional_) whether to run the **PCAP sidecar** in Cloud Run gen1 compatible mode; default value is `false`.
 
   > When using `latest` or `gen1` container images, this environment variable will be automatically set to `true`.
+
+- `PCAP_ORDERED`: (BOOLEAN, _optional_) when `PCAP_JSON` or `PCAP_JSON_LOG` are enabled, wheter to print packets in captured order ( if set to `false`, packet will be written as fast as possible ); default value is `false`.
+
+  > In order to improve performance, packets are translated and written concurrently; when `PCAP_ORDERED` is enabled, only translations are performed concurrently. Enabling `PCAP_ORDERED` may cause packet capturing to be slower, so it is recommended to keep it disabled as all translated packets have a `pcap.num` property to assert order.
+
+- `PCAP_HC_PORT`: (NUMBER, _optional_) the TCP port that should be used to accept startup probes; connections will only be accepted when packet capturing is ready; default value is `12345`.
 
 ## Considerations
 
