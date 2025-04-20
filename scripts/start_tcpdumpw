@@ -5,7 +5,7 @@ set +x
 if [[ "${PCAP_FSN_ENABLED}" == true ]]; then
     # only wait for PCAP FSN if it is enabled
     while : ; do
-        pcapfsn_ready=$(ps -efa | grep --color=never '/pcap_fsn' | grep --color=never -v grep | wc -l  | tr -d '\n')
+        pcapfsn_ready=$(ps -efa | grep --color=never '/pcapfsn' | grep --color=never -v grep | wc -l  | tr -d '\n')
         [[ "${pcapfsn_ready}" == '1' ]] \
             && echo "{\"severity\":\"INFO\",\"message\":\"PCAP FS notifier is running\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
             && break

@@ -2,6 +2,7 @@
 
 set +x
 
+# PCAP files directory is only required if GCS export strategy is set to use `GCS Fuse`
 if [[ "$PCAP_GCS_FUSE" == true && "${PCAP_FSN_ENABLED}" == true ]]; then
     # only create the PCAP files directory in GCS if FUSE and FSN are both enabled
     while : ; do
@@ -18,4 +19,4 @@ if [[ "$PCAP_GCS_FUSE" == true && "${PCAP_FSN_ENABLED}" == true ]]; then
     exec mkdir -pv "${PCAP_DIR}"
 fi
 
-echo "{\"severity\":\"NOTICE\",\"message\":\"GCS export is disabled\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+exec echo "{\"severity\":\"NOTICE\",\"message\":\"GCS Fuse is disabled\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"

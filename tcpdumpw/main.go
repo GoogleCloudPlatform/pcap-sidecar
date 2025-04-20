@@ -511,7 +511,7 @@ func waitDone(job *tcpdumpJob, pcapMutex *flock.Flock, exitSignal *string) {
 		}
 	}
 
-	// `TCPDUMPW_EXITED` file creation signals `pcap_fsn` to start its own termination process
+	// `TCPDUMPW_EXITED` file creation signals `pcapfsn` to start its own termination process
 	terminationSignal, err := os.OpenFile(*exitSignal, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o666)
 
 	if err == nil {

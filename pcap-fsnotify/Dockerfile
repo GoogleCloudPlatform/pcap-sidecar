@@ -20,13 +20,14 @@ FROM --platform=linux/amd64 golang:${GOLANG_VERSION}-bookworm AS builder
 ARG GOLANG_VERSION='1.23.7'
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG BIN_NAME=pcap_fsn
+ARG BIN_NAME=pcapfsn
 
 WORKDIR /app
 
 COPY ./pcap-fsnotify/go.mod go.mod
 COPY ./pcap-fsnotify/go.sum go.sum
 COPY ./pcap-fsnotify/main.go main.go
+COPY ./pcap-fsnotify/internal/ internal/
 
 RUN go install mvdan.cc/gofumpt@latest
 

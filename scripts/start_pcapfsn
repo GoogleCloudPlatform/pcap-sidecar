@@ -7,42 +7,49 @@ if [[ "${PCAP_FSN_ENABLED}" == false ]]; then
     exec sleep infinity
 fi
 
-while : ; do
-    [[ -d ${PCAP_DIR} ]] \
-        && echo "{\"severity\":\"INFO\",\"message\":\"PCAP files directory is now available at: ${PCAP_DIR}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
-        && break
-    echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP files directory to be available at: ${PCAP_DIR} ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
-    sleep 1
-done
+
+# check for PCAP files export directory only if GCS export strategy is set to `GCS Fuse`
+if [[ "${PCAP_GCS_FUSE}" == true ]]; then
+    while : ; do
+        [[ -d ${PCAP_DIR} ]] \
+            && echo "{\"severity\":\"INFO\",\"message\":\"PCAP files directory is now available at: ${PCAP_DIR}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
+            && break
+        echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP files directory to be available at: ${PCAP_DIR} ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+        sleep 1
+    done
+fi
 
 if [[ "$PCAP_JSONDUMP" == true ]]; then
-    PCAP_EXT="${PCAP_EXT},json"
+    export PCAP_EXT="${PCAP_EXT},json"
 fi
 
 if [[ "${PCAP_RT_ENV}" == "cloud_run_gen1" ]]; then
-    unset PCAP_COMPAT
     export PCAP_COMPAT='true'
 fi
 
-if [[ "${PCAP_DEBUG}" == false ]]; then
+if [[ "${PCAP_DEBUG}" == true ]]; then
     ls -l "${PCAP_DIR}"
 fi
 
 set -x
 
-# `exec` allows `/bin/pcap_fsn` to receive signals directly
-exec env /bin/pcap_fsn \
+# `exec` allows `/bin/pcapfsn` to receive signals directly
+exec env /bin/pcapfsn \
     -debug="${PCAP_DEBUG:-false}" \
     -env="${PCAP_EXEC_ENV:-run}" \
     -run=${PCAP_RUN:-true} \
     -gae=${PCAP_GAE:-false} \
     -gke=${PCAP_GKE:-false} \
-    -src_dir=${PCAP_TMP} \
-    -gcs_dir=${PCAP_DIR} \
     -pcap_ext="${PCAP_EXT}" \
     -gzip="${PCAP_GZIP:-true}" \
     -interval="${PCAP_SECS:-60}" \
     -retries_max="${PCAP_FSN_RETRIES_MAX:-6}" \
     -retries_delay="${PCAP_FSN_RETRIES_DELAY:-2}" \
     -compat="${PCAP_COMPAT:-false}" \
-    -rt_env="${PCAP_RT_ENV:-cloud_run_gen2}"
+    -rt_env="${PCAP_RT_ENV:-cloud_run_gen2}" \
+    -src_dir=${PCAP_TMP} \
+    -gcs_dir=${PCAP_DIR} \
+    -gcs_export="${PCAP_GCS_EXPORT:-true}" \
+    -gcs_fuse="${PCAP_GCS_FUSE:-true}" \
+    -gcs_bucket="${PCAP_GCS_BUCKET:-none}" \
+    -instance_id="${INSTANCE_ID}"
