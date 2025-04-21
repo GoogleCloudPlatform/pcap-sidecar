@@ -26,10 +26,16 @@ import (
 	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify/internal/constants"
 	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify/internal/log"
 	"github.com/pkg/errors"
+	sf "github.com/wissance/stringFormatter"
 	"go.uber.org/zap/zapcore"
 )
 
 type (
+	ClosableWriter interface {
+		io.Writer
+		io.Closer
+	}
+
 	Exporter interface {
 		Export(
 			ctx context.Context,
@@ -92,11 +98,11 @@ func (x *nilExporter) Export(
 
 	x.logger.LogEvent(
 		zapcore.WarnLevel,
-		fmt.Sprintf("lost PCAP file: %s", *srcPcapFile),
+		sf.Format("lost PCAP file: {0}", *srcPcapFile),
 		PCAP_EXPORT,
 		map[string]any{
-			"src": *srcPcapFile,
-			"tgt": x.toTargetPcapFile(srcPcapFile, compress),
+			"source": *srcPcapFile,
+			"target": x.toTargetPcapFile(srcPcapFile, compress),
 		},
 		err)
 
@@ -107,10 +113,11 @@ func (x *exporter) toTargetPcapFile(
 	srcPcapFile *string,
 	compress bool,
 ) string {
-	tgtPcapFile := filepath.Join(x.directory, *srcPcapFile)
+	pcapFileName := filepath.Base(*srcPcapFile)
+	tgtPcapFile := filepath.Join(x.directory, pcapFileName)
 	// If compressing PCAP files is enabled, add `gz` siffux to the destination PCAP file path
 	if compress {
-		return fmt.Sprintf("%s.gz", tgtPcapFile)
+		return sf.Format("{0}.gz", tgtPcapFile)
 	}
 	return tgtPcapFile
 }
@@ -118,7 +125,7 @@ func (x *exporter) toTargetPcapFile(
 func (x *exporter) export(
 	srcPcapFile *string,
 	tgtPcapFile *string,
-	outputPcapWriter io.Writer,
+	outputPcapWriter ClosableWriter,
 	compress bool,
 	delete bool,
 ) (int64, error) {
@@ -129,7 +136,7 @@ func (x *exporter) export(
 	if err != nil {
 		x.logger.LogFsEvent(
 			zapcore.ErrorLevel,
-			fmt.Sprintf("failed to OPEN file %s", *srcPcapFile),
+			sf.Format("failed to OPEN file {0}", *srcPcapFile),
 			PCAP_EXPORT,
 			*srcPcapFile,
 			*tgtPcapFile,
@@ -141,19 +148,33 @@ func (x *exporter) export(
 	// Copy source PCAP into destination PCAP, compressing destination PCAP is optional
 	if compress {
 		gzipPcap := gzip.NewWriter(outputPcapWriter)
-		defer gzipPcap.Close() // this is still required; `Close()` on parent `Writer` does not trigger `Close()` at `gzip`
-		defer gzipPcap.Flush()
 		pcapBytes, err = io.Copy(gzipPcap, inputPcapWriter)
+		gzipPcap.Flush()
+		gzipPcap.Close() // this is still required; `Close()` on parent `Writer` does not trigger `Close()` at `gzip`
 	} else {
 		pcapBytes, err = io.Copy(outputPcapWriter, inputPcapWriter)
 	}
 
-	defer inputPcapWriter.Close()
+	if err != nil {
+		inputPcapWriter.Close()
+		x.logger.LogFsEvent(
+			zapcore.ErrorLevel,
+			sf.Format("failed to COPY file: {0}", *srcPcapFile),
+			PCAP_EXPORT,
+			*srcPcapFile,
+			*tgtPcapFile,
+			0,
+			err)
+		return pcapBytes, errors.Wrapf(err, "failed to COPY file: %s", *srcPcapFile)
+	}
+
+	err = outputPcapWriter.Close()
+	inputPcapWriter.Close()
 
 	if err != nil {
 		x.logger.LogFsEvent(
 			zapcore.ErrorLevel,
-			fmt.Sprintf("failed to EXPORT file: %s", *srcPcapFile),
+			sf.Format("failed to EXPORT file: {0}", *srcPcapFile),
 			PCAP_EXPORT,
 			*srcPcapFile,
 			*tgtPcapFile,
@@ -164,7 +185,7 @@ func (x *exporter) export(
 
 	x.logger.LogFsEvent(
 		zapcore.InfoLevel,
-		fmt.Sprintf("EXPORTED: %s", *srcPcapFile),
+		sf.Format("EXPORTED: {0}", *srcPcapFile),
 		PCAP_EXPORT,
 		*srcPcapFile,
 		*tgtPcapFile,
@@ -177,7 +198,7 @@ func (x *exporter) export(
 		if err != nil {
 			x.logger.LogFsEvent(
 				zapcore.ErrorLevel,
-				fmt.Sprintf("failed to DELETE file: %s", *srcPcapFile),
+				sf.Format("failed to DELETE file: {0}", *srcPcapFile),
 				PCAP_EXPORT,
 				*srcPcapFile,
 				*tgtPcapFile,
@@ -186,7 +207,7 @@ func (x *exporter) export(
 		} else {
 			x.logger.LogFsEvent(
 				zapcore.InfoLevel,
-				fmt.Sprintf("DELETED: %s", *srcPcapFile),
+				sf.Format("DELETED: {0}", *srcPcapFile),
 				PCAP_EXPORT,
 				*srcPcapFile,
 				*tgtPcapFile,

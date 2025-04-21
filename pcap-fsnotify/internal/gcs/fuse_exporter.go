@@ -22,6 +22,7 @@ import (
 	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify/internal/log"
 	"github.com/avast/retry-go/v4"
 	"github.com/pkg/errors"
+	sf "github.com/wissance/stringFormatter"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -85,8 +86,16 @@ func (x *fuseExporter) Export(
 				0,
 				err)
 		}))
-
-	pcapFileWriter.Close()
+	if err != nil {
+		x.logger.LogFsEvent(
+			zapcore.ErrorLevel,
+			sf.Format("failed to COPY file: {0}", *srcPcapFile),
+			PCAP_EXPORT,
+			*srcPcapFile,
+			tgtPcapFile,
+			0,
+			err)
+	}
 
 	return &tgtPcapFile, &pcapBytes, nil
 }

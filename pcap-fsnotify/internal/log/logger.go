@@ -88,7 +88,7 @@ func (l *Logger) LogEvent(
 	err error,
 ) {
 	now := time.Now()
-	_data := map[string]interface{}{
+	_data := map[string]any{
 		"event": event,
 	}
 	if err != nil {
@@ -97,8 +97,15 @@ func (l *Logger) LogEvent(
 	if len(data) > 0 {
 		maps.Copy(_data, data)
 	}
-	sugar.Logw(level, message, "sidecar", l.sidecar, "module", l.module, "tags", l.tags, "data", _data,
-		"timestamp", map[string]interface{}{"seconds": now.Unix(), "nanos": now.Nanosecond()})
+	sugar.Logw(level, message,
+		"sidecar", l.sidecar,
+		"module", l.module,
+		"tags", l.tags,
+		"data", _data,
+		"timestamp", map[string]interface{}{
+			"seconds": now.Unix(),
+			"nanos":   now.Nanosecond(),
+		})
 }
 
 func (l *Logger) LogFsEvent(
