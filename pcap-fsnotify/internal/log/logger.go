@@ -116,12 +116,15 @@ func (l *Logger) LogFsEvent(
 	by int64,
 	err error,
 ) {
-	data := map[string]interface{}{
-		"fs": fsnEvent{
-			Source: src,
-			Target: tgt,
-			Bytes:  by,
-		},
+	e := fsnEvent{
+		Source: src,
+		Target: tgt,
+	}
+	if by > 0 {
+		e.Bytes = by
+	}
+	data := map[string]any{
+		"fs": e,
 	}
 	l.LogEvent(level, message, event, data, err)
 }

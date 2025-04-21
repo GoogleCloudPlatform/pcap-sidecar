@@ -94,7 +94,10 @@ func (x *nilExporter) Export(
 	tgtPcap := ""
 	pcapBytes := int64(0)
 
-	err := errors.Wrapf(nilExporterError, "not exported: %s", *srcPcapFile)
+	err := errors.Wrap(
+		nilExporterError,
+		sf.Format("not exported: {0}", *srcPcapFile),
+	)
 
 	x.logger.LogEvent(
 		zapcore.WarnLevel,
@@ -128,6 +131,7 @@ func (x *exporter) export(
 	outputPcapWriter ClosableWriter,
 	compress bool,
 	delete bool,
+	cb func(*string, *string, *int64) error,
 ) (int64, error) {
 	pcapBytes := int64(0)
 
@@ -142,11 +146,13 @@ func (x *exporter) export(
 			*tgtPcapFile,
 			0,
 			err)
-		return pcapBytes, errors.Wrapf(err, "failed to open source pcap: %s", *srcPcapFile)
+		return pcapBytes, errors.Wrap(err,
+			sf.Format("failed to open source pcap: {0}", *srcPcapFile))
 	}
 
 	// Copy source PCAP into destination PCAP, compressing destination PCAP is optional
 	if compress {
+		// see: https://pkg.go.dev/compress/gzip#NewWriter
 		gzipPcap := gzip.NewWriter(outputPcapWriter)
 		pcapBytes, err = io.Copy(gzipPcap, inputPcapWriter)
 		gzipPcap.Flush()
@@ -178,9 +184,23 @@ func (x *exporter) export(
 			PCAP_EXPORT,
 			*srcPcapFile,
 			*tgtPcapFile,
-			0,
+			pcapBytes,
 			err)
-		return pcapBytes, errors.Wrapf(err, "failed to EXPORT file: %s", *srcPcapFile)
+		return pcapBytes, errors.Wrap(err,
+			sf.Format("failed to COPY file: {0}", *srcPcapFile))
+	}
+
+	if err = cb(srcPcapFile, tgtPcapFile, &pcapBytes); err != nil {
+		x.logger.LogFsEvent(
+			zapcore.ErrorLevel,
+			sf.Format("failed to EXPORT file: {0}", *srcPcapFile),
+			PCAP_EXPORT,
+			*srcPcapFile,
+			*tgtPcapFile,
+			pcapBytes,
+			err)
+		return pcapBytes, errors.Wrap(err,
+			sf.Format("failed to EXPORT file: {0}", *srcPcapFile))
 	}
 
 	x.logger.LogFsEvent(

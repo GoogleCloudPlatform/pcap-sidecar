@@ -16,7 +16,6 @@ package gcs
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify/internal/log"
@@ -58,44 +57,56 @@ func (x *fuseExporter) Export(
 	if err != nil {
 		x.logger.LogFsEvent(
 			zapcore.ErrorLevel,
-			fmt.Sprintf("failed to CREATE file: %s", tgtPcapFile),
+			sf.Format("failed to CREATE file: {0}", tgtPcapFile),
 			PCAP_EXPORT,
 			*srcPcapFile,
 			tgtPcapFile,
 			0,
 			err)
-		return &tgtPcapFile, &pcapBytes, errors.Wrapf(err, "failed to create destination pcap: %s", tgtPcapFile)
+		return &tgtPcapFile, &pcapBytes, errors.Wrap(err,
+			sf.Format("failed to create destination pcap: {0}", tgtPcapFile))
 	}
 	// x.logger.logFsEvent(zapcore.InfoLevel, fmt.Sprintf("CREATED: %s", tgtPcap), PCAP_EXPORT, *srcPcap, tgtPcap, 0)
 
 	pcapBytes, err = retry.DoWithData(func() (int64, error) {
 		// Copy source PCAP into destination PCAP directory, compressing destination PCAP is optional
-		return x.export(srcPcapFile, &tgtPcapFile, pcapFileWriter, compress, delete)
+		return x.export(
+			srcPcapFile, &tgtPcapFile,
+			pcapFileWriter,
+			compress, delete,
+			func(
+				src *string,
+				tgt *string,
+				size *int64,
+			) error {
+				x.logger.LogFsEvent(
+					zapcore.InfoLevel,
+					sf.Format("copied {0} bytes into file: {1}", *size, *tgt),
+					PCAP_EXPORT,
+					*src,
+					*tgt,
+					*size,
+					nil)
+
+				return pcapFileWriter.Close()
+			})
 	},
 		retry.Context(ctx),
 		retry.Attempts(x.maxRetries),
 		retry.Delay(x.retriesDelay),
 		retry.DelayType(retry.FixedDelay),
-		retry.OnRetry(func(n uint, err error) {
-			x.logger.LogFsEvent(
+		retry.OnRetry(func(attempt uint, err error) {
+			x.logger.LogEvent(
 				zapcore.WarnLevel,
-				fmt.Sprintf("failed to COPY file at attempt %d: %v", n+1, *srcPcapFile),
+				sf.Format("failed to COPY file at attempt {0}: {1}", attempt+1, *srcPcapFile),
 				PCAP_EXPORT,
-				*srcPcapFile,
-				tgtPcapFile,
-				0,
+				map[string]any{
+					"source":  *srcPcapFile,
+					"target":  tgtPcapFile,
+					"attempt": attempt + 1,
+				},
 				err)
 		}))
-	if err != nil {
-		x.logger.LogFsEvent(
-			zapcore.ErrorLevel,
-			sf.Format("failed to COPY file: {0}", *srcPcapFile),
-			PCAP_EXPORT,
-			*srcPcapFile,
-			tgtPcapFile,
-			0,
-			err)
-	}
 
 	return &tgtPcapFile, &pcapBytes, nil
 }

@@ -163,7 +163,7 @@ func (x *libraryExporter) dialContext(
 	}
 }
 
-func (x *libraryExporter) interceptor(
+func (x *libraryExporter) streamInterceptor(
 	ctx context.Context,
 	desc *grpc.StreamDesc,
 	cc *grpc.ClientConn,
@@ -184,6 +184,7 @@ func (x *libraryExporter) interceptor(
 			"bucket": x.bucket,
 		},
 		nil)
+
 	return streamer(ctx, desc, cc, method, opts...)
 }
 
@@ -207,7 +208,7 @@ func (x *libraryExporter) initialize(
 			grpc.WithKeepaliveParams(x.keepalive),
 		),
 		option.WithGRPCDialOption(
-			grpc.WithStreamInterceptor(x.interceptor),
+			grpc.WithStreamInterceptor(x.streamInterceptor),
 		),
 		option.WithGRPCConnectionPool(2),
 		option.WithQuotaProject(x.projectID),
@@ -229,6 +230,7 @@ func (x *libraryExporter) newObject(
 	tgtPcapFile *string,
 ) *storage.ObjectHandle {
 	attempts := uint8(0)
+
 	return x.handle.
 		Object(*tgtPcapFile).
 		Retryer(
@@ -238,16 +240,28 @@ func (x *libraryExporter) newObject(
 			}),
 			storage.WithMaxAttempts(int(x.maxRetries)),
 			storage.WithErrorFunc(func(err error) bool {
-				x.logger.LogFsEvent(
+				// see: https://pkg.go.dev/cloud.google.com/go/storage#WithErrorFunc
+				// GCS client always calls this function, even when `err` is `nil`
+				if err == nil {
+					// if `err` is `nil`, then prevent retyring by returning `false`:
+					//   - which we assume is the logical thing to do if there is no error...
+					return false
+				}
+
+				attempts += 1
+
+				x.logger.LogEvent(
 					zapcore.WarnLevel,
-					sf.Format("failed to EXPORT file at attempt {0}: {1}", attempts+1, *srcPcapFile),
+					sf.Format("failed to EXPORT file at attempt {0}: {1}", attempts, *srcPcapFile),
 					PCAP_EXPORT,
-					*srcPcapFile,
-					*tgtPcapFile,
-					0,
+					map[string]any{
+						"source":  *srcPcapFile,
+						"target":  tgtPcapFile,
+						"attempt": attempts,
+					},
 					err,
 				)
-				attempts += 1
+
 				return true
 			}),
 			storage.WithPolicy(storage.RetryAlways),
@@ -316,17 +330,26 @@ func (x *libraryExporter) Export(
 
 	writer := x.newWriter(ctx, srcPcapFile, &tgtPcapFile, object)
 
-	pcapBytes, err := x.export(srcPcapFile, &tgtPcapFile, writer, compress, delete)
-	if err != nil {
-		x.logger.LogFsEvent(
-			zapcore.ErrorLevel,
-			sf.Format("failed to EXPORT file: {0}", *srcPcapFile),
-			PCAP_EXPORT,
-			*srcPcapFile,
-			tgtPcapFile,
-			0,
-			err)
-	}
+	pcapBytes, err := x.export(
+		srcPcapFile, &tgtPcapFile,
+		writer,
+		compress, delete,
+		func(
+			src *string,
+			tgt *string,
+			size *int64,
+		) error {
+			x.logger.LogFsEvent(
+				zapcore.InfoLevel,
+				sf.Format("sent {0} bytes into gs://{1}/{2}", *size, x.bucket, *tgt),
+				PCAP_EXPORT,
+				*src,
+				*tgt,
+				*size,
+				nil)
+
+			return writer.Close()
+		})
 
 	return &tgtPcapFile, &pcapBytes, err
 }
@@ -375,7 +398,8 @@ func NewClientLibraryExporter(
 			"failed to create PCAP files client library exporter",
 			PCAP_EXPORT,
 			map[string]any{
-				"bucket": bucket,
+				"project": projectID,
+				"bucket":  bucket,
 			},
 			err)
 	}
