@@ -31,20 +31,28 @@ PCAP_FILE="${PCAP_TMP}/part"
 GCS_DIR="${GOOGLE_CLOUD_PROJECT}/${PCAP_EXEC_ENV}/${K_SERVICE}/${GCP_REGION}/${K_REVISION}/${PCAP_DATE}/${INSTANCE_ID}"
 PCAP_DIR="${PCAP_MNT}/${GCS_DIR}"
 
-export PCAP_GCS_EXPORT="${PCAP_GCS_EXPORT:-true}"
+if [[ -z "${PCAP_GCS_BUCKET}" ]]; then
+  export PCAP_GCS_EXPORT=false
+else
+  export PCAP_GCS_EXPORT=${PCAP_GCS_EXPORT:-true}
+fi
+
 if [[ "${PCAP_GCS_EXPORT}" == false ]]; then
   # if `PCAP_GCS_EXPORT` is set to `false` then:
   # PCAP engines that generate files should be disabled.
-  export PCAP_GCS_FUSE='false'
-  export PCAP_TCPDUMP='false'
-  export PCAP_JSONDUMP='false'
+  export PCAP_GCS_FUSE=false
+  export PCAP_TCPDUMP=false
+  export PCAP_JSONDUMP=false
+  export PCAP_FSN_ENABLED=false
 else
-  export PCAP_GCS_FUSE="${PCAP_GCS_FUSE:-true}"
-  export PCAP_TCPDUMP="${PCAP_TCPDUMP:-true}"
-  export PCAP_JSONDUMP="${PCAP_JSON:-false}"
+  # default behavior when GCS export is enabled
+  export PCAP_GCS_FUSE=${PCAP_GCS_FUSE:-true}
+  export PCAP_TCPDUMP=${PCAP_TCPDUMP:-true}
+  export PCAP_JSONDUMP=${PCAP_JSON:-false}
+  export PCAP_FSN_ENABLED=true
 fi
 
-export PCAP_JSONDUMP_LOG=${PCAP_JSON_LOG:-false}
+export PCAP_JSONDUMP_LOG=${PCAP_JSON_LOG:-true}
 
 echo "PCAP_DEBUG=${PCAP_DEBUG:-false}" >> ${ENV_FILE}
 echo "PCAP_SUPERVISOR_PORT=${PCAP_SUPERVISOR_PORT:-23456}" >> ${ENV_FILE}
@@ -64,11 +72,11 @@ echo "PCAP_TMP=${PCAP_TMP}" >> ${ENV_FILE}
 echo "PCAP_FILE=${PCAP_FILE}" >> ${ENV_FILE}
 echo "PCAP_DIR=${PCAP_DIR}" >> ${ENV_FILE}
 echo "PCAP_GCS_FUSE=${PCAP_GCS_FUSE}" >> ${ENV_FILE}
-echo "PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET:-none}" >> ${ENV_FILE}
+echo "PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET:-DISABLED}" >> ${ENV_FILE}
 echo "PCAP_GCS_DIR=${GCS_DIR}" >> ${ENV_FILE}
 echo "GCS_DIR=${GCS_DIR}" >> ${ENV_FILE}
-echo "GCS_BUCKET=${PCAP_GCS_BUCKET:-none}" >> ${ENV_FILE}
-echo "PCAP_IFACE=${PCAP_IFACE:-eth}" >> ${ENV_FILE}
+echo "GCS_BUCKET=${PCAP_GCS_BUCKET:-DISABLED}" >> ${ENV_FILE}
+echo "PCAP_IFACE=${PCAP_IFACE:-any}" >> ${ENV_FILE}
 echo "PCAP_SNAPLEN=${PCAP_SNAPSHOT_LENGTH:-65536}" >> ${ENV_FILE}
 echo "PCAP_USE_CRON=${PCAP_USE_CRON:-false}" >> ${ENV_FILE}
 echo "PCAP_CRON_EXP=${PCAP_CRON_EXP:--}" >> ${ENV_FILE}
