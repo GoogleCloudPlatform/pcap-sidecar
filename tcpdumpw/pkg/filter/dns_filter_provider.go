@@ -122,5 +122,8 @@ func newDNSFilterProviderFromRawFilter(
 	rawFilter *string,
 	compatFilters pcap.PcapFilters,
 ) pcap.PcapFilterProvider {
-	return newDNSFilterProvider(&pcap.PcapFilter{Raw: rawFilter}, compatFilters)
+	return newDNSFilterProvider(
+		&pcap.PcapFilter{
+			Raw: rawFilter,
+		}, compatFilters)
 }
