@@ -49,37 +49,38 @@ import (
 func UNUSED(x ...interface{}) {}
 
 var (
-	use_cron   = flag.Bool("use_cron", false, "perform packet capture at specific intervals")
-	cron_exp   = flag.String("cron_exp", "", "stardard cron expression; i/e: '1 * * * *'")
-	timezone   = flag.String("timezone", "UTC", "TimeZone to be used to schedule packet captures")
-	duration   = flag.Int("timeout", 0, "perform packet capture during this mount of seconds")
-	interval   = flag.Int("interval", 60, "seconds after which tcpdump rotates PCAP files")
-	snaplen    = flag.Int("snaplen", 0, "bytes to be captured from each packet")
-	extension  = flag.String("extension", "pcap", "extension to be used for tcpdump PCAP files")
-	directory  = flag.String("directory", "", "directory where PCAP files will be stored")
-	tcp_dump   = flag.Bool("tcpdump", true, "enable JSON PCAP using tcpdump")
-	json_dump  = flag.Bool("jsondump", false, "enable JSON PCAP using gopacket")
-	json_log   = flag.Bool("jsonlog", false, "enable JSON PCAP to stardard output")
-	ordered    = flag.Bool("ordered", false, "write JSON PCAP output as obtained from gopacket")
-	conntrack  = flag.Bool("conntrack", false, "enable connection tracking ('ordered' is also enabled)")
-	gcp_env    = flag.String("env", "run", "literal ID of the execution environment; any of: run, gae, gke")
-	gcp_run    = flag.Bool("run", true, "Cloud Run execution environment")
-	gcp_gae    = flag.Bool("gae", false, "App Engine execution environment")
-	gcp_gke    = flag.Bool("gke", false, "Kubernetes Engine execution environment")
-	pcap_iface = flag.String("iface", "", "prefix to scan for network interfaces to capture from")
-	hc_port    = flag.Uint("hc_port", 12345, "TCP port for health checking")
-	filter     = flag.String("filter", pcap.PcapDefaultFilter, "BPF filter to be used for capturing packets")
-	l3_protos  = flag.String("l3_protos", "ipv4,ipv6", "FQDNs to be translated into IPs to apply as packet filter")
-	l4_protos  = flag.String("l4_protos", "tcp,udp", "FQDNs to be translated into IPs to apply as packet filter")
-	hosts      = flag.String("hosts", "", "FQDNs to be translated into IPs to apply as packet filter")
-	ports      = flag.String("ports", "", "TCP/UDP ports to be used in any side of the 5-tuple for a packet to be captured")
-	ipv4       = flag.String("ipv4", "", "IPv4s or CIDR to be applied to the packet filter")
-	ipv6       = flag.String("ipv6", "", "IPv6s or CIDR to be applied to the packet filter")
-	tcp_flags  = flag.String("tcp_flags", "", "TCP flags to be set for a segment to be captured")
-	ephemerals = flag.String("ephemerals", "32768,65535", "range of ephemeral ports")
-	compat     = flag.Bool("compat", false, "apply filters in Cloud Run gen1 mode")
-	rt_env     = flag.String("rt_env", "cloud_run_gen2", "runtime where PCAP sidecar is used")
-	pcap_debug = flag.Bool("debug", false, "enable debug logs")
+	use_cron       = flag.Bool("use_cron", false, "perform packet capture at specific intervals")
+	cron_exp       = flag.String("cron_exp", "", "stardard cron expression; i/e: '1 * * * *'")
+	timezone       = flag.String("timezone", "UTC", "TimeZone to be used to schedule packet captures")
+	duration       = flag.Int("timeout", 0, "perform packet capture during this mount of seconds")
+	interval       = flag.Int("interval", 60, "seconds after which tcpdump rotates PCAP files")
+	snaplen        = flag.Int("snaplen", 0, "bytes to be captured from each packet")
+	extension      = flag.String("extension", "pcap", "extension to be used for tcpdump PCAP files")
+	directory      = flag.String("directory", "", "directory where PCAP files will be stored")
+	tcp_dump       = flag.Bool("tcpdump", true, "enable JSON PCAP using tcpdump")
+	json_dump      = flag.Bool("jsondump", false, "enable JSON PCAP using gopacket")
+	json_log       = flag.Bool("jsonlog", false, "enable JSON PCAP to stardard output")
+	ordered        = flag.Bool("ordered", false, "write JSON PCAP output as obtained from gopacket")
+	conntrack      = flag.Bool("conntrack", false, "enable connection tracking ('ordered' is also enabled)")
+	gcp_env        = flag.String("env", "run", "literal ID of the execution environment; any of: run, gae, gke")
+	gcp_run        = flag.Bool("run", true, "Cloud Run execution environment")
+	gcp_gae        = flag.Bool("gae", false, "App Engine execution environment")
+	gcp_gke        = flag.Bool("gke", false, "Kubernetes Engine execution environment")
+	pcap_iface     = flag.String("iface", "", "prefix to scan for network interfaces to capture from")
+	hc_port        = flag.Uint("hc_port", 12345, "TCP port for health checking")
+	filter         = flag.String("filter", pcap.PcapDefaultFilter, "BPF filter to be used for capturing packets")
+	l3_protos      = flag.String("l3_protos", "ipv4,ipv6", "FQDNs to be translated into IPs to apply as packet filter")
+	l4_protos      = flag.String("l4_protos", "tcp,udp", "FQDNs to be translated into IPs to apply as packet filter")
+	hosts          = flag.String("hosts", "", "FQDNs to be translated into IPs to apply as packet filter")
+	ports          = flag.String("ports", "", "TCP/UDP ports to be used in any side of the 5-tuple for a packet to be captured")
+	ipv4           = flag.String("ipv4", "", "IPv4s or CIDR to be applied to the packet filter")
+	ipv6           = flag.String("ipv6", "", "IPv6s or CIDR to be applied to the packet filter")
+	tcp_flags      = flag.String("tcp_flags", "", "TCP flags to be set for a segment to be captured")
+	ephemerals     = flag.String("ephemerals", "32768,65535", "range of ephemeral ports")
+	compat         = flag.Bool("compat", false, "apply filters in Cloud Run gen1 mode")
+	rt_env         = flag.String("rt_env", "cloud_run_gen2", "runtime where PCAP sidecar is used")
+	pcap_debug     = flag.Bool("debug", false, "enable debug logs")
+	pcap_verbosity = flag.String("verbosity", "DEBUG", "PCAP translations verbosity")
 
 	supervisor = flag.String("supervisor", "http://127.0.0.1:23456", "supervisord 'serverurl'")
 
@@ -169,6 +170,17 @@ const (
 	defaultNoProcsInterval = uint(15)  // 15 seconds
 	maxNoProcsInterval     = uint(240) // 4 minutes
 )
+
+func parsePcapVerbosity(
+	pcapVerbosity *string,
+) pcap.PcapVerbosity {
+	switch strings.ToUpper(*pcapVerbosity) {
+	case "INFO":
+		return pcap.VERBOSITY_INFO
+	default: // DEBUG
+		return pcap.VERBOSITY_DEBUG
+	}
+}
 
 func jlog(severity jLogLevel, job *tcpdumpJob, message string) {
 	now := time.Now()
@@ -287,6 +299,7 @@ func start(ctx context.Context, timeout *time.Duration, job *tcpdumpJob) error {
 func tcpdump(
 	timeout time.Duration,
 	debug bool,
+	verbosity pcap.PcapVerbosity,
 ) error {
 	jobID := jid.Load().(uuid.UUID)
 	exeID := xid.Load().(uuid.UUID)
@@ -305,6 +318,7 @@ func tcpdump(
 	ctx = context.WithValue(ctx, pcap.PcapContextLogName,
 		fmt.Sprintf("projects/%s/pcap/%s", projectID, id))
 	ctx = context.WithValue(ctx, pcap.PcapContextDebug, debug)
+	ctx = context.WithValue(ctx, pcap.PcapContextVerbosity, verbosity)
 
 	err := start(ctx, &timeout, job)
 	if err == context.DeadlineExceeded || err == context.Canceled {
@@ -319,11 +333,13 @@ func newPcapConfig(
 	filters []pcap.PcapFilterProvider,
 	compatFilters pcap.PcapFilters,
 	snaplen, interval int,
-	compat, ordered, conntrack bool,
+	compat, debug, ordered, conntrack bool,
 	ephemerals *pcap.PcapEphemeralPorts,
+	verbosity pcap.PcapVerbosity,
 ) *pcap.PcapConfig {
 	return &pcap.PcapConfig{
 		Compat:        compat,
+		Debug:         debug,
 		Promisc:       true,
 		Iface:         iface,
 		Snaplen:       snaplen,
@@ -338,6 +354,7 @@ func newPcapConfig(
 		Filters:       filters,
 		CompatFilters: compatFilters,
 		Ephemerals:    ephemerals,
+		Verbosity:     verbosity,
 	}
 }
 
@@ -347,8 +364,9 @@ func createTasks(
 	filters []pcap.PcapFilterProvider,
 	compatFilters pcap.PcapFilters,
 	snaplen, interval *int,
-	compat, tcpdump, jsondump, jsonlog, ordered, conntrack, gcpGAE *bool,
+	compat, debug, tcpdump, jsondump, jsonlog, ordered, conntrack, gcpGAE *bool,
 	ephemerals *pcap.PcapEphemeralPorts,
+	verbosity pcap.PcapVerbosity,
 ) []*pcapTask {
 	tasks := []*pcapTask{}
 
@@ -385,8 +403,8 @@ func createTasks(
 
 		output := fmt.Sprintf(runFileOutput, *directory, netIface.Index, netIface.Name)
 
-		tcpdumpCfg := newPcapConfig(iface, "pcap", output, *extension, *filter, filters, compatFilters, *snaplen, *interval, *compat, *ordered, *conntrack, ephemerals)
-		jsondumpCfg := newPcapConfig(iface, "json", output, "json", *filter, filters, compatFilters, *snaplen, *interval, *compat, *ordered, *conntrack, ephemerals)
+		tcpdumpCfg := newPcapConfig(iface, "pcap", output, *extension, *filter, filters, compatFilters, *snaplen, *interval, *compat, *debug, *ordered, *conntrack, ephemerals, verbosity)
+		jsondumpCfg := newPcapConfig(iface, "json", output, "json", *filter, filters, compatFilters, *snaplen, *interval, *compat, *debug, *ordered, *conntrack, ephemerals, verbosity)
 
 		// premature optimization is the root of all evil
 		var engineErr, writerErr error = nil, nil
@@ -640,9 +658,11 @@ func main() {
 
 	ephemeralPortRange := parseEphemeralPorts(ephemerals)
 
+	pcapVerbosity := parsePcapVerbosity(pcap_verbosity)
+
 	tasks := createTasks(ctx, pcap_iface, timezone, directory, extension,
-		filter, filters, compatFilters, snaplen, interval, compat, tcp_dump,
-		json_dump, json_log, ordered, conntrack, gcp_gae, ephemeralPortRange)
+		filter, filters, compatFilters, snaplen, interval, compat, pcap_debug, tcp_dump,
+		json_dump, json_log, ordered, conntrack, gcp_gae, ephemeralPortRange, pcapVerbosity)
 
 	if len(tasks) == 0 {
 		jlog(FATAL, &emptyTcpdumpJob, "no PCAP tasks available")
@@ -695,6 +715,7 @@ func main() {
 		logName := fmt.Sprintf("projects/%s/pcaps/%s", os.Getenv("PROJECT_ID"), id)
 		ctx = context.WithValue(ctx, pcap.PcapContextLogName, logName)
 		ctx = context.WithValue(ctx, pcap.PcapContextDebug, *pcap_debug)
+		ctx = context.WithValue(ctx, pcap.PcapContextVerbosity, pcapVerbosity)
 		// start the TCP listener for health checks
 		go startTCPListener(ctx, hc_port, job, tcpStopChannel)
 		start(ctx, &timeout, job)
@@ -736,7 +757,7 @@ func main() {
 	// Use the provided `cron` expression ro schedule the packet capturing job
 	j, err := s.NewJob(
 		gocron.CronJob(fmt.Sprintf("TZ=%s %s", *timezone, *cron_exp), true),
-		gocron.NewTask(tcpdump, timeout, *pcap_debug),
+		gocron.NewTask(tcpdump, timeout, *pcap_debug, pcapVerbosity),
 		gocron.WithName("tcpdump"),
 		gocron.WithSingletonMode(gocron.LimitModeReschedule),
 		gocron.WithEventListeners(

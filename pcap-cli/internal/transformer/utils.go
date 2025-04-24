@@ -14,7 +14,11 @@
 
 package transformer
 
-import "github.com/google/gopacket/layers"
+import (
+	"context"
+
+	"github.com/google/gopacket/layers"
+)
 
 func parseTCPflags(tcp *layers.TCP) uint8 {
 	var setFlags uint8 = 0b00000000
@@ -63,4 +67,41 @@ func (eph *PcapEphemeralPorts) isEphemeralTCPPort(tcpPort *layers.TCPPort) bool 
 
 func isConnectionTermination(tcpFlags *uint8) bool {
 	return *tcpFlags&(tcpFin|tcpRst) != 0
+}
+
+func isDebug(
+	ctx context.Context,
+	translator *pcapTranslator,
+) bool {
+	if debug := ctx.Value(ContextDebug); debug != nil {
+		return debug.(bool)
+	}
+	return translator.debug
+}
+
+func verbosity(
+	ctx context.Context,
+	translator *pcapTranslator,
+) PcapVerbosity {
+	if verbosity := ctx.Value(ContextVerbosity); verbosity != nil {
+		return verbosity.(PcapVerbosity)
+	}
+	return translator.verbosity
+}
+
+func isDebugVerbosity(
+	ctx context.Context,
+	translator *pcapTranslator,
+) bool {
+	return verbosity(ctx, translator) == VERBOSITY_DEBUG
+}
+
+func atDebugVerbosity(
+	ctx context.Context,
+	translator *pcapTranslator,
+	debugFunc func(context.Context, *pcapTranslator),
+) {
+	if isDebugVerbosity(ctx, translator) {
+		debugFunc(ctx, translator)
+	}
 }

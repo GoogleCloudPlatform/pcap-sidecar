@@ -48,24 +48,64 @@ message Packet {
     string target = 2;
   }
 
-  message IPv4 {
-    fixed32 source = 1;
-    fixed32 target = 2;
-  }
-
-  message IPv6 {
+  message L3ProtoIPv4 {
     bytes source = 1;
     bytes target = 2;
   }
 
+  message L3ProtoIPv6 {
+    bytes source = 1;
+    bytes target = 2;
+  }
+
+  message L4ProtoUDP {
+    uint32 source = 1;
+    uint32 target = 2;
+  }
+
+  message TcpFlags {
+
+    uint32 flags = 1;
+
+    bool syn = 2;
+    bool ack = 3;
+    bool psh = 4;
+    bool fin = 5;
+    bool rst = 6;
+    bool urg = 7;
+    bool ece = 8;
+    bool cwr = 9;
+
+  }
+
+  message L4ProtoTCP {
+    uint32 source = 1;
+    uint32 target = 2;
+
+    uint32 seq = 3;
+    uint32 ack = 4;
+
+    TcpFlags flags = 5;
+  }
+
   Pcap pcap = 1;
+
   Metadata meta = 2;
+  
   google.protobuf.Timestamp timestamp = 3;
+  
   Interface iface = 4;
+  
   Layer2 l2 = 5;
+  
   oneof l3 {
     Layer3 ip = 6;
-    IPv4 ip4 = 7;
-    IPv6 ip6 = 8;
+    L3ProtoIPv4 ip4 = 7;
+    L3ProtoIPv6 ip6 = 8;
+  }
+
+  oneof l4 {
+    L4ProtoUDP udp = 9;
+    L4ProtoTCP tcp = 10;
   }
 }

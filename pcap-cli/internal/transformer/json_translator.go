@@ -47,9 +47,8 @@ import (
 
 type (
 	JSONPcapTranslator struct {
+		*pcapTranslator
 		fm                        *flowMutex
-		iface                     *PcapIface
-		ephemerals                *PcapEphemeralPorts
 		traceToHttpRequestMap     *haxmap.Map[string, *httpRequest]
 		flowToStreamToSequenceMap FTSTSM
 	}
@@ -67,7 +66,7 @@ const (
 )
 
 func init() {
-	translators.Store(JSON, newJSONPcapTranslator)
+	registerTranslatorFactory(JSON, newJSONPcapTranslator)
 }
 
 func (t *JSONPcapTranslator) translate(_ *gopacket.Packet) error {
@@ -105,43 +104,55 @@ func (t *JSONPcapTranslator) next(
 
 	pcap, _ := json.Object("pcap")
 	pcap.Set(id, "id")
-	pcap.Set(logName, "ctx")
 
 	serialStr := strconv.FormatUint(*serial, 10)
 	pcap.Set(serialStr, "num")
+
+	labels, _ := json.Object("logging.googleapis.com/labels")
+	labels.Set("pcap", "run.googleapis.com/tool")
+	labels.Set(id, "run.googleapis.com/pcap/id")
 
 	metadata := (*packet).Metadata()
 	info := metadata.CaptureInfo
 
 	meta, _ := json.Object("meta")
-	meta.Set(metadata.Truncated, "trunc")
-	meta.Set(info.Length, "len")
-	meta.Set(info.CaptureLength, "cap_len")
+
 	meta.Set(flowIDstr, "flow")
-	meta.Set(info.Timestamp.Format(time.RFC3339Nano), "timestamp")
+	meta.Set(metadata.Truncated, "trunc")
+
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			pcap.Set(logName, "ctx")
+
+			labels.Set(logName, "run.googleapis.com/pcap/name")
+			labels.Set(t.iface.Name, "run.googleapis.com/pcap/iface")
+
+			meta.Set(info.Length, "len")
+			meta.Set(info.CaptureLength, "cap_len")
+			meta.Set(info.Timestamp.Format(time.RFC3339Nano), "timestamp")
+
+			netIface := *nic
+			iface, _ := json.Object("iface")
+			iface.Set(netIface.Index, "index")
+			iface.Set(netIface.Name, "name")
+
+			if sizeOfAddrs := nic.Addrs.Cardinality(); sizeOfAddrs > 0 {
+				addrs, _ := iface.ArrayOfSize(sizeOfAddrs, "addrs")
+				netIface.Addrs.Each(func(IP string) bool {
+					sizeOfAddrs -= 1
+					addrs.SetIndex(IP, sizeOfAddrs)
+					return false
+				})
+			}
+		})
 
 	timestamp, _ := json.Object("timestamp")
 	timestamp.Set(info.Timestamp.Unix(), "seconds")
 	timestamp.Set(info.Timestamp.Nanosecond(), "nanos")
-
-	netIface := *nic
-	iface, _ := json.Object("iface")
-	iface.Set(netIface.Index, "index")
-	iface.Set(netIface.Name, "name")
-	if sizeOfAddrs := nic.Addrs.Cardinality(); sizeOfAddrs > 0 {
-		addrs, _ := iface.ArrayOfSize(sizeOfAddrs, "addrs")
-		netIface.Addrs.Each(func(IP string) bool {
-			sizeOfAddrs -= 1
-			addrs.SetIndex(IP, sizeOfAddrs)
-			return false
-		})
-	}
-
-	labels, _ := json.Object("logging.googleapis.com/labels")
-	labels.Set("pcap", "run.googleapis.com/tool")
-	labels.Set(id, "run.googleapis.com/pcap/id")
-	labels.Set(logName, "run.googleapis.com/pcap/name")
-	labels.Set(t.iface.Name, "run.googleapis.com/pcap/iface")
 
 	return json
 }
@@ -263,8 +274,15 @@ func (t *JSONPcapTranslator) translateIPv4Layer(
 
 	L3, _ := json.Object("L3")
 
-	networkFlow := ip4.NetworkFlow()
-	t.addEndpoints(L3, &networkFlow)
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			networkFlow := ip4.NetworkFlow()
+			t.addEndpoints(L3, &networkFlow)
+		})
 
 	L3.Set(ip4.Version, "v")
 	L3.Set(ip4.SrcIP, "src")
@@ -277,11 +295,13 @@ func (t *JSONPcapTranslator) translateIPv4Layer(
 	L3.Set(ip4.FragOffset, "foff")
 	L3.Set(ip4.Checksum, "xsum")
 
-	opts, _ := L3.ArrayOfSize(len(ip4.Options), "opts")
-	for i, opt := range ip4.Options {
-		o, _ := opts.ObjectI(i)
-		o.Set(string(opt.OptionData), "data")
-		o.Set(opt.OptionType, "type")
+	if sizeOfOptions := len(ip4.Options); sizeOfOptions > 0 {
+		opts, _ := L3.ArrayOfSize(sizeOfOptions, "opts")
+		for i, opt := range ip4.Options {
+			o, _ := opts.ObjectI(i)
+			o.Set(string(opt.OptionData), "data")
+			o.Set(opt.OptionType, "type")
+		}
 	}
 
 	proto, _ := L3.Object("proto")
@@ -309,8 +329,15 @@ func (t *JSONPcapTranslator) translateIPv6Layer(
 
 	L3, _ := json.Object("L3")
 
-	networkFlow := ip6.NetworkFlow()
-	t.addEndpoints(L3, &networkFlow)
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			networkFlow := ip6.NetworkFlow()
+			t.addEndpoints(L3, &networkFlow)
+		})
 
 	L3.Set(ip6.Version, "v")
 	L3.Set(ip6.SrcIP, "src")
@@ -626,9 +653,6 @@ func (t *JSONPcapTranslator) translateTCPLayer(ctx context.Context, tcp *layers.
 
 	L4, _ := json.Object("L4")
 
-	transportFlow := tcp.TransportFlow()
-	t.addEndpoints(L4, &transportFlow)
-
 	L4.Set(strconv.FormatInt(int64(len(tcp.Payload)), 10), "len")
 
 	L4.Set(tcp.Seq, "seq")
@@ -654,9 +678,21 @@ func (t *JSONPcapTranslator) translateTCPLayer(ctx context.Context, tcp *layers.
 	flagsMap.Set(tcp.NS, "NS")
 
 	setFlags := parseTCPflags(tcp)
+
 	flags.Set(setFlags, "dec")
-	flags.Set("0b"+strconv.FormatUint(uint64(setFlags), 2), "bin")
-	flags.Set("0x"+strconv.FormatUint(uint64(setFlags), 16), "hex")
+
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			transportFlow := tcp.TransportFlow()
+			t.addEndpoints(L4, &transportFlow)
+
+			flags.Set("0b"+strconv.FormatUint(uint64(setFlags), 2), "bin")
+			flags.Set("0x"+strconv.FormatUint(uint64(setFlags), 16), "hex")
+		})
 
 	if flagsStr, ok := tcpFlagsStr[setFlags]; ok {
 		flags.Set(flagsStr, "str")
@@ -694,6 +730,10 @@ func (t *JSONPcapTranslator) translateTCPLayer(ctx context.Context, tcp *layers.
 func (t *JSONPcapTranslator) translateTLSLayer(ctx context.Context, tls *layers.TLS) fmt.Stringer {
 	json := gabs.New()
 
+	if !isDebugVerbosity(ctx, t.pcapTranslator) {
+		return json
+	}
+
 	TLS, _ := json.Object("TLS")
 
 	// disabled until memory leak is fixed
@@ -715,39 +755,30 @@ func (t *JSONPcapTranslator) translateTLSLayer(ctx context.Context, tls *layers.
 	return json
 }
 
-func (t *JSONPcapTranslator) translateDNSLayer(ctx context.Context, dns *layers.DNS) fmt.Stringer {
-	json := gabs.New()
+func (t *JSONPcapTranslator) translateDNSquestions(
+	ctx context.Context,
+	dns *layers.DNS,
+	size *int,
+	domain *gabs.Container,
+) {
+	questions, _ := domain.ArrayOfSize(*size, "questions")
 
-	domain, _ := json.Object("DNS")
-	domain.Set(dns.ID, "id")
-	domain.Set(dns.OpCode.String(), "op")
-	domain.Set(dns.ResponseCode.String(), "response_code")
-
-	/*
-		json.SetP(dns.QR, "DNS.QR")
-		json.SetP(dns.AA, "DNS.AA")
-		json.SetP(dns.TC, "DNS.TC")
-		json.SetP(dns.RD, "DNS.RD")
-		json.SetP(dns.RA, "DNS.RA")
-	*/
-
-	domain.Set(dns.QDCount, "questions_count")
-	domain.Set(dns.ANCount, "answers_count")
-
-	/*
-		json.SetP(dns.NSCount, "DNS.authorities_count")
-		json.SetP(dns.ARCount, "DNS.additionals_count")
-	*/
-
-	questions, _ := domain.ArrayOfSize(len(dns.Questions), "questions")
 	for i, question := range dns.Questions {
 		q, _ := questions.ObjectI(i)
 		q.Set(string(question.Name), "name")
 		q.Set(question.Type.String(), "type")
 		q.Set(question.Class.String(), "class")
 	}
+}
 
-	answers, _ := domain.ArrayOfSize(len(dns.Answers), "answers")
+func (t *JSONPcapTranslator) translateDNSanswers(
+	ctx context.Context,
+	dns *layers.DNS,
+	size *int,
+	domain *gabs.Container,
+) {
+	answers, _ := domain.ArrayOfSize(*size, "answers")
+
 	for i, answer := range dns.Answers {
 		a, _ := answers.ObjectI(i)
 
@@ -830,6 +861,46 @@ func (t *JSONPcapTranslator) translateDNSLayer(ctx context.Context, dns *layers.
 
 		}
 
+	}
+}
+
+func (t *JSONPcapTranslator) translateDNSLayer(ctx context.Context, dns *layers.DNS) fmt.Stringer {
+	json := gabs.New()
+
+	domain, _ := json.Object("DNS")
+	domain.Set(dns.ID, "id")
+	domain.Set(dns.OpCode.String(), "op")
+	domain.Set(dns.ResponseCode.String(), "response_code")
+
+	/*
+		json.SetP(dns.QR, "DNS.QR")
+		json.SetP(dns.AA, "DNS.AA")
+		json.SetP(dns.TC, "DNS.TC")
+		json.SetP(dns.RD, "DNS.RD")
+		json.SetP(dns.RA, "DNS.RA")
+	*/
+
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			domain.Set(dns.QDCount, "questions_count")
+			domain.Set(dns.ANCount, "answers_count")
+		})
+
+	/*
+		json.SetP(dns.NSCount, "DNS.authorities_count")
+		json.SetP(dns.ARCount, "DNS.additionals_count")
+	*/
+
+	if sizeOfQuestions := len(dns.Questions); sizeOfQuestions > 0 {
+		t.translateDNSquestions(ctx, dns, &sizeOfQuestions, domain)
+	}
+
+	if sizeOfAnswers := len(dns.Answers); sizeOfAnswers > 0 {
+		t.translateDNSanswers(ctx, dns, &sizeOfAnswers, domain)
 	}
 
 	return json
@@ -1014,6 +1085,12 @@ func (t *JSONPcapTranslator) finalize(
 	// this approach is best effort as a client may use a `not ephemeral port` to create a socket for egress networking.
 	isSrcLocal = isSrcLocal && !t.ephemerals.isEphemeralTCPPort(&srcPort)
 	json.Set(isSrcLocal, "local")
+
+	if !isDebugVerbosity(ctx, t.pcapTranslator) {
+		// skip advanced packet analysis
+		json.Set(message, "message")
+		return json, nil
+	}
 
 	// `finalize` is invoked from a `worker` via a go-routine `pool`:
 	//   - there are no guarantees about which packet will get `finalize`d 1st
@@ -1690,17 +1767,18 @@ func (t *JSONPcapTranslator) write(ctx context.Context, writer io.Writer, packet
 func newJSONPcapTranslator(
 	ctx context.Context,
 	debug bool,
+	verbosity PcapVerbosity,
 	iface *PcapIface,
 	ephemerals *PcapEphemeralPorts,
 ) PcapTranslator {
 	flowToStreamToSequenceMap := haxmap.New[uint64, STSM]()
 	traceToHttpRequestMap := haxmap.New[string, *httpRequest]()
 	flowMutex := newFlowMutex(ctx, debug, flowToStreamToSequenceMap, traceToHttpRequestMap)
+	translator := newPcapTranslator(ctx, debug, verbosity, iface, ephemerals)
 
 	return &JSONPcapTranslator{
+		pcapTranslator:            translator,
 		fm:                        flowMutex,
-		iface:                     iface,
-		ephemerals:                ephemerals,
 		traceToHttpRequestMap:     traceToHttpRequestMap,
 		flowToStreamToSequenceMap: flowToStreamToSequenceMap,
 	}

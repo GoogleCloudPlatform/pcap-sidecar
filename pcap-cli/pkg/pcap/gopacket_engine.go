@@ -167,11 +167,11 @@ func (p *Pcap) Start(
 
 	// create new transformer for the specified output format
 	if cfg.Ordered {
-		p.fn, err = transformer.NewOrderedTransformer(ctx, iface, cfg.Ephemerals, compatFilters, ioWriters, &format, debug, compat)
+		p.fn, err = transformer.NewOrderedTransformer(ctx, cfg.Verbosity, iface, cfg.Ephemerals, compatFilters, ioWriters, &format, debug, compat)
 	} else if cfg.ConnTrack {
-		p.fn, err = transformer.NewConnTrackTransformer(ctx, iface, cfg.Ephemerals, compatFilters, ioWriters, &format, debug, compat)
+		p.fn, err = transformer.NewConnTrackTransformer(ctx, cfg.Verbosity, iface, cfg.Ephemerals, compatFilters, ioWriters, &format, debug, compat)
 	} else {
-		p.fn, err = transformer.NewTransformer(ctx, iface, cfg.Ephemerals, compatFilters, ioWriters, &format, debug, compat)
+		p.fn, err = transformer.NewTransformer(ctx, cfg.Verbosity, iface, cfg.Ephemerals, compatFilters, ioWriters, &format, debug, compat)
 	}
 
 	if err != nil {

@@ -34,6 +34,7 @@ set -x
 
 # `exec` allows `/bin/tcpdumpw` to receive signals directly
 exec env /bin/tcpdumpw \
+    -verbosity="${PCAP_VERBOSITY:-DEBUG}" \
     -debug="${PCAP_DEBUG:-false}" \
     -env="${PCAP_EXEC_ENV:-run}" \
     -run=${PCAP_RUN:-true} \

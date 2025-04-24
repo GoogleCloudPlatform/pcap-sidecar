@@ -41,6 +41,8 @@ type (
 
 	PcapFilterMode uint8
 
+	PcapVerbosity = transformer.PcapVerbosity
+
 	PcapFilter struct {
 		Raw *string
 	}
@@ -95,6 +97,7 @@ type (
 		Filters       []PcapFilterProvider
 		CompatFilters PcapFilters
 		Ephemerals    *PcapEphemeralPorts
+		Verbosity     PcapVerbosity
 	}
 
 	PcapEngine interface {
@@ -128,9 +131,15 @@ const (
 )
 
 const (
-	PcapContextID      = transformer.ContextID
-	PcapContextLogName = transformer.ContextLogName
-	PcapContextDebug   = transformer.ContextDebug
+	PcapContextID        = transformer.ContextID
+	PcapContextLogName   = transformer.ContextLogName
+	PcapContextVerbosity = transformer.ContextVerbosity
+	PcapContextDebug     = transformer.ContextDebug
+)
+
+const (
+	VERBOSITY_INFO  = transformer.VERBOSITY_INFO
+	VERBOSITY_DEBUG = transformer.VERBOSITY_DEBUG
 )
 
 const (

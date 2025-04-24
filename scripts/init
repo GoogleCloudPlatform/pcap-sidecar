@@ -88,6 +88,9 @@ echo "PCAP_TCPDUMP=${PCAP_TCPDUMP}" >> ${ENV_FILE}
 echo "PCAP_JSONDUMP=${PCAP_JSONDUMP}" >> ${ENV_FILE}
 echo "PCAP_JSONDUMP_LOG=${PCAP_JSONDUMP_LOG}" >> ${ENV_FILE}
 
+# most verbose PCAP translation by default
+echo "PCAP_VERBOSITY=${PCAP_VERBOSITY:-DEBUG}" >> ${ENV_FILE}
+
 # short-rotate-secs == small-pcap-files
 # If APP is data intensive: keep this value small to avoid memory saturation
 echo "PCAP_SECS=${PCAP_ROTATE_SECS:-60}" >> ${ENV_FILE}

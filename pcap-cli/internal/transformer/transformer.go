@@ -39,9 +39,17 @@ import (
 var transformerLogger = log.New(os.Stderr, "[transformer] - ", log.LstdFlags)
 
 type (
-	PcapTranslatorFactory = func(context.Context, bool, *PcapIface, *PcapEphemeralPorts) PcapTranslator
+	PcapTranslatorFactory = func(
+		context.Context,
+		bool, // debug
+		PcapVerbosity,
+		*PcapIface,
+		*PcapEphemeralPorts,
+	) PcapTranslator
 
 	PcapTranslatorFmt uint8
+
+	PcapVerbosity uint8
 
 	PcapTranslator interface {
 		next(context.Context, *PcapIface, *uint64, *gopacket.Packet) fmt.Stringer
@@ -65,6 +73,13 @@ type (
 		finalize(context.Context, netIfaceIndex, *PcapIface, *uint64, *gopacket.Packet, bool, fmt.Stringer) (fmt.Stringer, error)
 		write(context.Context, io.Writer, *fmt.Stringer) (int, error)
 		done(context.Context)
+	}
+
+	pcapTranslator struct {
+		debug      bool
+		verbosity  PcapVerbosity
+		iface      *PcapIface
+		ephemerals *PcapEphemeralPorts
 	}
 
 	netIfaceIndex map[string]*PcapIface
@@ -91,6 +106,7 @@ type (
 		counter         *atomic.Int64
 		filters         PcapFilters
 		debug, compat   bool
+		verbosity       PcapVerbosity
 	}
 
 	IPcapTransformer interface {
@@ -118,9 +134,15 @@ type (
 )
 
 const (
-	ContextID      = ContextKey("id")
-	ContextLogName = ContextKey("logName")
-	ContextDebug   = ContextKey("debug")
+	ContextID        = ContextKey("id")
+	ContextLogName   = ContextKey("logName")
+	ContextVerbosity = ContextKey("verbosity")
+	ContextDebug     = ContextKey("debug")
+)
+
+const (
+	VERBOSITY_INFO PcapVerbosity = iota
+	VERBOSITY_DEBUG
 )
 
 //go:generate stringer -type=PcapTranslatorFmt
@@ -253,6 +275,13 @@ var (
 	errUnavailableTranslation = errors.New("packet translation is unavailable")
 	errUnavailableTranslator  = errors.New("packet translator is unavailable")
 )
+
+func registerTranslatorFactory(
+	format PcapTranslatorFmt,
+	translatorFactory PcapTranslatorFactory,
+) {
+	translators.Store(format, translatorFactory)
+}
 
 func (t *PcapTransformer) writeTranslation(ctx context.Context, task *pcapWriteTask) error {
 	defer func() {
@@ -468,13 +497,14 @@ func (t *PcapTransformer) writeTranslationFn(ctx context.Context, task interface
 
 func newTranslator(
 	ctx context.Context,
+	verbosity PcapVerbosity,
 	debug bool,
 	iface *PcapIface,
 	ephemerals *PcapEphemeralPorts,
 	format PcapTranslatorFmt,
 ) (PcapTranslator, error) {
 	if factory, ok := translators.Load(format); ok {
-		return factory.(PcapTranslatorFactory)(ctx, debug, iface, ephemerals), nil
+		return factory.(PcapTranslatorFactory)(ctx, debug, verbosity, iface, ephemerals), nil
 	}
 
 	return nil, errors.Join(errUnavailableTranslator,
@@ -610,9 +640,25 @@ func provideStrategy(
 	}
 }
 
+func newPcapTranslator(
+	ctx context.Context,
+	debug bool,
+	verbosity PcapVerbosity,
+	iface *PcapIface,
+	ephemerals *PcapEphemeralPorts,
+) *pcapTranslator {
+	return &pcapTranslator{
+		debug:      debug,
+		verbosity:  verbosity,
+		iface:      iface,
+		ephemerals: ephemerals,
+	}
+}
+
 // transformers get instances of `io.Writer` instead of `pcap.PcapWriter` to prevent closing.
 func newTransformer(
 	ctx context.Context,
+	verbosity PcapVerbosity,
 	iface *PcapIface,
 	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
@@ -623,7 +669,7 @@ func newTransformer(
 	debug, compat bool,
 ) (IPcapTransformer, error) {
 	pcapFmt := pcapTranslatorFmts[*format]
-	translator, err := newTranslator(ctx, debug, iface, ephemerals, pcapFmt)
+	translator, err := newTranslator(ctx, verbosity, debug, iface, ephemerals, pcapFmt)
 	if err != nil {
 		return nil, err
 	}
@@ -689,6 +735,7 @@ func newTransformer(
 		counter:         new(atomic.Int64),
 		debug:           debug,
 		compat:          compat,
+		verbosity:       verbosity,
 	}
 
 	provideStrategy(ctx, transformer, preserveOrder, connTracking)
@@ -717,6 +764,7 @@ func newTransformer(
 
 func NewOrderedTransformer(
 	ctx context.Context,
+	verbosity PcapVerbosity,
 	iface *PcapIface,
 	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
@@ -724,11 +772,12 @@ func NewOrderedTransformer(
 	format *string,
 	debug, compat bool,
 ) (IPcapTransformer, error) {
-	return newTransformer(ctx, iface, ephemerals, filters, writers, format, true /* preserveOrder */, false /* connTracking */, debug, compat)
+	return newTransformer(ctx, verbosity, iface, ephemerals, filters, writers, format, true /* preserveOrder */, false /* connTracking */, debug, compat)
 }
 
 func NewConnTrackTransformer(
 	ctx context.Context,
+	verbosity PcapVerbosity,
 	iface *PcapIface,
 	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
@@ -736,11 +785,12 @@ func NewConnTrackTransformer(
 	format *string,
 	debug, compat bool,
 ) (IPcapTransformer, error) {
-	return newTransformer(ctx, iface, ephemerals, filters, writers, format, true /* preserveOrder */, true /* connTracking */, debug, compat)
+	return newTransformer(ctx, verbosity, iface, ephemerals, filters, writers, format, true /* preserveOrder */, true /* connTracking */, debug, compat)
 }
 
 func NewDebugTransformer(
 	ctx context.Context,
+	verbosity PcapVerbosity,
 	iface *PcapIface,
 	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
@@ -748,11 +798,12 @@ func NewDebugTransformer(
 	format *string,
 	compat bool,
 ) (IPcapTransformer, error) {
-	return newTransformer(ctx, iface, ephemerals, filters, writers, format, false /* preserveOrder */, false /* connTracking */, true /* debug */, compat)
+	return newTransformer(ctx, verbosity, iface, ephemerals, filters, writers, format, false /* preserveOrder */, false /* connTracking */, true /* debug */, compat)
 }
 
 func NewTransformer(
 	ctx context.Context,
+	verbosity PcapVerbosity,
 	iface *PcapIface,
 	ephemerals *PcapEphemeralPorts,
 	filters PcapFilters,
@@ -760,5 +811,5 @@ func NewTransformer(
 	format *string,
 	debug, compat bool,
 ) (IPcapTransformer, error) {
-	return newTransformer(ctx, iface, ephemerals, filters, writers, format, false /* preserveOrder */, false /* connTracking */, debug, compat)
+	return newTransformer(ctx, verbosity, iface, ephemerals, filters, writers, format, false /* preserveOrder */, false /* connTracking */, debug, compat)
 }
