@@ -61,7 +61,7 @@ const (
 	jsonTranslationSummaryWithoutL4 = jsonTranslationSummary + " | {L3Src} > {L3Dst}"
 	jsonTranslationSummaryARP       = jsonTranslationSummary + " | ARP | {L3Src} > {L3Dst}"
 	jsonTranslationSummaryICMP      = jsonTranslationSummary + " | ICMPv{icmpVersion} | {L3Src} > {L3Dst} | {icmpMessage}"
-	jsonTranslationSummaryUDP       = jsonTranslationSummary + " | {L4Proto} | {srcProto}/{L3Src}:{L4Src} > {dstProto}/{L3Dst}:{L4Dst}"
+	jsonTranslationSummaryUDP       = jsonTranslationSummary + " | {L4Proto} | {L3Src}:{L4Src} > {L3Dst}:{L4Dst}"
 	jsonTranslationSummaryTCP       = jsonTranslationSummaryUDP + " | [{tcpFlags}] | len/seq/ack:{tcpLen}/{tcpSeq}/{tcpAck}"
 )
 
@@ -103,14 +103,12 @@ func (t *JSONPcapTranslator) next(
 	logName := ctx.Value(ContextLogName)
 
 	pcap, _ := json.Object("pcap")
-	pcap.Set(id, "id")
 
 	serialStr := strconv.FormatUint(*serial, 10)
 	pcap.Set(serialStr, "num")
 
 	labels, _ := json.Object("logging.googleapis.com/labels")
-	labels.Set("pcap", "run.googleapis.com/tool")
-	labels.Set(id, "run.googleapis.com/pcap/id")
+	labels.Set("pcap-sidecar", "run.googleapis.com/tool")
 
 	metadata := (*packet).Metadata()
 	info := metadata.CaptureInfo
@@ -120,12 +118,20 @@ func (t *JSONPcapTranslator) next(
 	meta.Set(flowIDstr, "flow")
 	meta.Set(metadata.Truncated, "trunc")
 
+	timestamp, _ := json.Object("timestamp")
+	timestamp.Set(info.Timestamp.Unix(), "seconds")
+	timestamp.Set(info.Timestamp.Nanosecond(), "nanos")
+
 	atDebugVerbosity(ctx,
 		t.pcapTranslator,
 		func(
 			ctx context.Context,
 			translator *pcapTranslator,
 		) {
+			pcap.Set(id, "id")
+
+			labels.Set(id, "run.googleapis.com/pcap/id")
+
 			pcap.Set(logName, "ctx")
 
 			labels.Set(logName, "run.googleapis.com/pcap/name")
@@ -149,10 +155,6 @@ func (t *JSONPcapTranslator) next(
 				})
 			}
 		})
-
-	timestamp, _ := json.Object("timestamp")
-	timestamp.Set(info.Timestamp.Unix(), "seconds")
-	timestamp.Set(info.Timestamp.Nanosecond(), "nanos")
 
 	return json
 }
@@ -274,16 +276,6 @@ func (t *JSONPcapTranslator) translateIPv4Layer(
 
 	L3, _ := json.Object("L3")
 
-	atDebugVerbosity(ctx,
-		t.pcapTranslator,
-		func(
-			ctx context.Context,
-			translator *pcapTranslator,
-		) {
-			networkFlow := ip4.NetworkFlow()
-			t.addEndpoints(L3, &networkFlow)
-		})
-
 	L3.Set(ip4.Version, "v")
 	L3.Set(ip4.SrcIP, "src")
 	L3.Set(ip4.DstIP, "dst")
@@ -295,6 +287,9 @@ func (t *JSONPcapTranslator) translateIPv4Layer(
 	L3.Set(ip4.FragOffset, "foff")
 	L3.Set(ip4.Checksum, "xsum")
 
+	proto, _ := L3.Object("proto")
+	proto.Set(ip4.Protocol, "num")
+
 	if sizeOfOptions := len(ip4.Options); sizeOfOptions > 0 {
 		opts, _ := L3.ArrayOfSize(sizeOfOptions, "opts")
 		for i, opt := range ip4.Options {
@@ -304,17 +299,26 @@ func (t *JSONPcapTranslator) translateIPv4Layer(
 		}
 	}
 
-	proto, _ := L3.Object("proto")
-	proto.Set(ip4.Protocol, "num")
-	proto.Set(ip4.Protocol.String(), "name")
-	// https://github.com/google/gopacket/blob/master/layers/ip4.go#L28-L40
-	L3.SetP(strings.Split(ip4.Flags.String(), "|"), "flags")
-
 	// hashing bytes yields `uint64`, and addition is commutative:
 	//   - so hashing the IP byte array representations and then adding then resulting `uint64`s is a commutative operation as well.
 	flowID := fnv1a.HashUint64(uint64(4) + fnv1a.HashBytes64(ip4.SrcIP.To4()) + fnv1a.HashBytes64(ip4.DstIP.To4()))
 	flowIDstr := strconv.FormatUint(flowID, 10)
 	L3.Set(flowIDstr, "flow") // IPv4(4) (0x04)
+
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			proto.Set(ip4.Protocol.String(), "name")
+
+			// https://github.com/google/gopacket/blob/master/layers/ip4.go#L28-L40
+			L3.Set(strings.Split(ip4.Flags.String(), "|"), "flags")
+
+			networkFlow := ip4.NetworkFlow()
+			t.addEndpoints(L3, &networkFlow)
+		})
 
 	return json
 }
@@ -329,16 +333,6 @@ func (t *JSONPcapTranslator) translateIPv6Layer(
 
 	L3, _ := json.Object("L3")
 
-	atDebugVerbosity(ctx,
-		t.pcapTranslator,
-		func(
-			ctx context.Context,
-			translator *pcapTranslator,
-		) {
-			networkFlow := ip6.NetworkFlow()
-			t.addEndpoints(L3, &networkFlow)
-		})
-
 	L3.Set(ip6.Version, "v")
 	L3.Set(ip6.SrcIP, "src")
 	L3.Set(ip6.DstIP, "dst")
@@ -349,13 +343,24 @@ func (t *JSONPcapTranslator) translateIPv6Layer(
 
 	proto, _ := L3.Object("proto")
 	proto.Set(ip6.NextHeader, "num")
-	proto.Set(ip6.NextHeader.String(), "name")
 
 	// hashing bytes yields `uint64`, and addition is commutative:
 	//   - so hashing the IP byte array representations and then adding then resulting `uint64`s is a commutative operation as well.
 	flowID := fnv1a.HashUint64(uint64(41) + fnv1a.HashBytes64(ip6.SrcIP.To16()) + fnv1a.HashBytes64(ip6.DstIP.To16()))
 	flowIDstr := strconv.FormatUint(flowID, 10)
 	L3.Set(flowIDstr, "flow") // IPv6(41) (0x29)
+
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			proto.Set(ip6.NextHeader.String(), "name")
+
+			networkFlow := ip6.NetworkFlow()
+			t.addEndpoints(L3, &networkFlow)
+		})
 
 	// missing `HopByHop`: https://github.com/google/gopacket/blob/master/layers/ip6.go#L40
 	return json
@@ -529,15 +534,22 @@ func (t *JSONPcapTranslator) translateICMPv6L3HeaderLayer(
 	dstIP := netip.AddrFrom16(ipBytes)
 	IPv6.Set(dstIP.String(), "dst")
 
-	nextHeader := uint8(ipHeader[6])
-	switch nextHeader {
-	default:
-		IPv6.Set(nextHeader, "proto")
-	case 0x06: // TCP
-		IPv6.Set("TCP", "proto")
-	case 0x11: // UDP
-		IPv6.Set("UDP", "proto")
-	}
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			nextHeader := uint8(ipHeader[6])
+			switch nextHeader {
+			default:
+				IPv6.Set(nextHeader, "proto")
+			case 0x06: // TCP
+				IPv6.Set("TCP", "proto")
+			case 0x11: // UDP
+				IPv6.Set("UDP", "proto")
+			}
+		})
 
 	return _json
 }
@@ -575,7 +587,8 @@ func (t *JSONPcapTranslator) translateUDPLayer(ctx context.Context, udp *layers.
 	return json
 }
 
-func (t *JSONPcapTranslator) addTCPWindowScale(
+func (t *JSONPcapTranslator) addTCPwindowScale(
+	ctx context.Context,
 	tcp *layers.TCP,
 	optKey, optHexVal *string,
 	optJSON, L4 *gabs.Container,
@@ -587,18 +600,33 @@ func (t *JSONPcapTranslator) addTCPWindowScale(
 	}
 
 	winScaleMultiplier := uint64(2 << (winScalePowerOf2 - 1))
-	realWindowSizeStr := strconv.FormatUint(uint64(tcp.Window)*winScaleMultiplier, 10)
-	winScale := gabs.New()
-	winScale.Set(optHexVal, "hex")
-	winScale.Set(winScalePowerOf2, "dec")
-	winScale.Set(strconv.FormatUint(winScaleMultiplier, 10), "scale")
-	winScale.Set(realWindowSizeStr, "win")
 
-	optJSON.ArrayAppend(winScale, *optKey)
+	realWindowSizeStr := strconv.FormatUint(uint64(tcp.Window)*winScaleMultiplier, 10)
+
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			winScale := gabs.New()
+
+			winScale.Set(optHexVal, "hex")
+			winScale.Set(winScalePowerOf2, "dec")
+			winScale.Set(strconv.FormatUint(winScaleMultiplier, 10), "scale")
+			winScale.Set(realWindowSizeStr, "win")
+
+			optJSON.ArrayAppend(winScale, *optKey)
+		})
+
 	L4.Set(realWindowSizeStr, "xwin")
 }
 
-func (t *JSONPcapTranslator) addTCPOptions(tcp *layers.TCP, L4 *gabs.Container) {
+func (t *JSONPcapTranslator) addTCPoptions(
+	ctx context.Context,
+	tcp *layers.TCP,
+	L4 *gabs.Container,
+) {
 	opts, _ := L4.ArrayOfSize(len(tcp.Options), "opts")
 	for i, tcpOpt := range tcp.Options {
 		// see: https://github.com/google/gopacket/blob/master/layers/tcp.go#L104C9-L128
@@ -626,16 +654,24 @@ func (t *JSONPcapTranslator) addTCPOptions(tcp *layers.TCP, L4 *gabs.Container) 
 					optHexVal := strings.TrimRight(optVal, "0")
 					switch tcpOpt.OptionType {
 					case 3: // WindowScale
-						t.addTCPWindowScale(tcp, &optKey, &optHexVal, opt, L4)
+						t.addTCPwindowScale(ctx, tcp, &optKey, &optHexVal, opt, L4)
 					default:
 						opt.ArrayAppend(optHexVal, optKey)
 					}
 				} else {
 					switch tcpOpt.OptionType {
 					case 8: // Timestamps
-						for _, ts := range strings.Split(optVal, "/") {
-							opt.ArrayAppend(strings.TrimSpace(ts), optKey)
-						}
+						atDebugVerbosity(ctx,
+							t.pcapTranslator,
+							func(
+								ctx context.Context,
+								translator *pcapTranslator,
+							) {
+								for _, ts := range strings.Split(optVal, "/") {
+									opt.ArrayAppend(strings.TrimSpace(ts), optKey)
+								}
+							})
+
 					default:
 						opt.ArrayAppend(optVal, optKey)
 					}
@@ -646,7 +682,57 @@ func (t *JSONPcapTranslator) addTCPOptions(tcp *layers.TCP, L4 *gabs.Container) 
 	}
 }
 
-func (t *JSONPcapTranslator) translateTCPLayer(ctx context.Context, tcp *layers.TCP) fmt.Stringer {
+func (t *JSONPcapTranslator) addTCPflags(
+	ctx context.Context,
+	tcp *layers.TCP,
+	flags *gabs.Container,
+) {
+	flagsStr := make([]string, 0, len(tcpFlags))
+
+	for key := range tcpFlags {
+		switch key {
+		case tcpSynStr:
+			if tcp.SYN {
+				flagsStr = append(flagsStr, tcpSynStr)
+			}
+		case tcpAckStr:
+			if tcp.ACK {
+				flagsStr = append(flagsStr, tcpAckStr)
+			}
+		case tcpPshStr:
+			if tcp.PSH {
+				flagsStr = append(flagsStr, tcpPshStr)
+			}
+		case tcpFinStr:
+			if tcp.FIN {
+				flagsStr = append(flagsStr, tcpFinStr)
+			}
+		case tcpRstStr:
+			if tcp.RST {
+				flagsStr = append(flagsStr, tcpRstStr)
+			}
+		case tcpUrgStr:
+			if tcp.URG {
+				flagsStr = append(flagsStr, tcpUrgStr)
+			}
+		case tcpEceStr:
+			if tcp.ECE {
+				flagsStr = append(flagsStr, tcpEceStr)
+			}
+		case tcpCwrStr:
+			if tcp.CWR {
+				flagsStr = append(flagsStr, tcpCwrStr)
+			}
+		}
+	}
+
+	flags.Set(strings.Join(flagsStr, "|"), "str")
+}
+
+func (t *JSONPcapTranslator) translateTCPLayer(
+	ctx context.Context,
+	tcp *layers.TCP,
+) fmt.Stringer {
 	json := gabs.New()
 
 	// https://github.com/google/gopacket/blob/master/layers/tcp.go#L19-L35
@@ -664,22 +750,26 @@ func (t *JSONPcapTranslator) translateTCPLayer(ctx context.Context, tcp *layers.
 
 	flags, _ := L4.Object("flags")
 
-	flagsMap, _ := flags.Object("map")
-
-	flagsMap.Set(tcp.SYN, "SYN")
-	flagsMap.Set(tcp.ACK, "ACK")
-	flagsMap.Set(tcp.PSH, "PSH")
-	flagsMap.Set(tcp.FIN, "FIN")
-	flagsMap.Set(tcp.RST, "RST")
-	flagsMap.Set(tcp.URG, "URG")
-	flagsMap.Set(tcp.ECE, "ECE")
-	flagsMap.Set(tcp.CWR, "CWR")
-
-	flagsMap.Set(tcp.NS, "NS")
-
 	setFlags := parseTCPflags(tcp)
 
 	flags.Set(setFlags, "dec")
+
+	if flagsStr, ok := tcpFlagsStr[setFlags]; ok {
+		flags.Set(flagsStr, "str")
+	} else {
+		// this scenario is slow, but it should also be exceedingly rare
+		t.addTCPflags(ctx, tcp, flags)
+	}
+
+	t.addTCPoptions(ctx, tcp, L4)
+
+	L4.Set(tcp.SrcPort, "src")
+	L4.Set(tcp.DstPort, "dst")
+
+	// TCP(6) (0x06) | `SrcPort` and `DstPort` are `uint8`
+	flowID := fnv1a.HashUint64(uint64(6) + uint64(tcp.SrcPort) + uint64(tcp.DstPort))
+	flowIDstr := strconv.FormatUint(flowID, 10)
+	L4.Set(flowIDstr, "flow")
 
 	atDebugVerbosity(ctx,
 		t.pcapTranslator,
@@ -687,42 +777,33 @@ func (t *JSONPcapTranslator) translateTCPLayer(ctx context.Context, tcp *layers.
 			ctx context.Context,
 			translator *pcapTranslator,
 		) {
+			if name, ok := layers.TCPPortNames[tcp.SrcPort]; ok {
+				L4.Set(name, "sproto")
+			}
+
+			if name, ok := layers.TCPPortNames[tcp.DstPort]; ok {
+				L4.Set(name, "dproto")
+			}
+
 			transportFlow := tcp.TransportFlow()
 			t.addEndpoints(L4, &transportFlow)
+
+			flagsMap, _ := flags.Object("map")
+
+			flagsMap.Set(tcp.SYN, "SYN")
+			flagsMap.Set(tcp.ACK, "ACK")
+			flagsMap.Set(tcp.PSH, "PSH")
+			flagsMap.Set(tcp.FIN, "FIN")
+			flagsMap.Set(tcp.RST, "RST")
+			flagsMap.Set(tcp.URG, "URG")
+			flagsMap.Set(tcp.ECE, "ECE")
+			flagsMap.Set(tcp.CWR, "CWR")
+
+			flagsMap.Set(tcp.NS, "NS")
 
 			flags.Set("0b"+strconv.FormatUint(uint64(setFlags), 2), "bin")
 			flags.Set("0x"+strconv.FormatUint(uint64(setFlags), 16), "hex")
 		})
-
-	if flagsStr, ok := tcpFlagsStr[setFlags]; ok {
-		flags.Set(flagsStr, "str")
-	} else {
-		// this scenario is slow, but it should also be exceedingly rare
-		flagsStr := make([]string, 0, len(tcpFlags))
-		for key := range tcpFlags {
-			if isSet, _ := flagsMap.Path(key).Data().(bool); isSet {
-				flagsStr = append(flagsStr, key)
-			}
-		}
-		flags.Set(strings.Join(flagsStr, "|"), "str")
-	}
-
-	t.addTCPOptions(tcp, L4)
-
-	L4.Set(tcp.SrcPort, "src")
-	if name, ok := layers.TCPPortNames[tcp.SrcPort]; ok {
-		L4.Set(name, "sproto")
-	}
-
-	L4.Set(tcp.DstPort, "dst")
-	if name, ok := layers.TCPPortNames[tcp.DstPort]; ok {
-		L4.Set(name, "dproto")
-	}
-
-	// TCP(6) (0x06) | `SrcPort` and `DstPort` are `uint8`
-	flowID := fnv1a.HashUint64(uint64(6) + uint64(tcp.SrcPort) + uint64(tcp.DstPort))
-	flowIDstr := strconv.FormatUint(flowID, 10)
-	L4.Set(flowIDstr, "flow")
 
 	return json
 }
@@ -880,16 +961,6 @@ func (t *JSONPcapTranslator) translateDNSLayer(ctx context.Context, dns *layers.
 		json.SetP(dns.RA, "DNS.RA")
 	*/
 
-	atDebugVerbosity(ctx,
-		t.pcapTranslator,
-		func(
-			ctx context.Context,
-			translator *pcapTranslator,
-		) {
-			domain.Set(dns.QDCount, "questions_count")
-			domain.Set(dns.ANCount, "answers_count")
-		})
-
 	/*
 		json.SetP(dns.NSCount, "DNS.authorities_count")
 		json.SetP(dns.ARCount, "DNS.additionals_count")
@@ -902,6 +973,16 @@ func (t *JSONPcapTranslator) translateDNSLayer(ctx context.Context, dns *layers.
 	if sizeOfAnswers := len(dns.Answers); sizeOfAnswers > 0 {
 		t.translateDNSanswers(ctx, dns, &sizeOfAnswers, domain)
 	}
+
+	atDebugVerbosity(ctx,
+		t.pcapTranslator,
+		func(
+			ctx context.Context,
+			translator *pcapTranslator,
+		) {
+			domain.Set(dns.QDCount, "questions_count")
+			domain.Set(dns.ANCount, "answers_count")
+		})
 
 	return json
 }
@@ -1039,12 +1120,6 @@ func (t *JSONPcapTranslator) finalize(
 		return json, nil
 	}
 
-	l4SrcProto, _ := json.S("L4", "sproto").Data().(string)
-	data["srcProto"] = l4SrcProto
-
-	l4DstProto, _ := json.S("L4", "dproto").Data().(string)
-	data["dstProto"] = l4DstProto
-
 	if isUDP {
 		data["L4Proto"] = "UDP"
 		srcPort, _ := json.S("L4", "src").Data().(layers.UDPPort)
@@ -1066,7 +1141,6 @@ func (t *JSONPcapTranslator) finalize(
 	dstPort, _ := json.S("L4", "dst").Data().(layers.TCPPort)
 	data["L4Dst"] = uint16(dstPort)
 
-	setFlags, _ := json.S("L4", "flags", "dec").Data().(uint8)
 	data["tcpFlags"] = json.S("L4", "flags", "str").Data().(string)
 
 	seq, _ := json.S("L4", "seq").Data().(uint32)
@@ -1091,6 +1165,8 @@ func (t *JSONPcapTranslator) finalize(
 		json.Set(message, "message")
 		return json, nil
 	}
+
+	setFlags, _ := json.S("L4", "flags", "dec").Data().(uint8)
 
 	// `finalize` is invoked from a `worker` via a go-routine `pool`:
 	//   - there are no guarantees about which packet will get `finalize`d 1st

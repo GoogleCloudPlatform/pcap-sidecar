@@ -130,8 +130,11 @@ if [[ "${PCAP_GCS_EXPORT}" == true ]]; then
 fi
 
 if [[ "${PCAP_DEBUG}" == true ]]; then
+  export PCAP_SUPERVISOR_OUTPUT='/dev/stdout'
   tcpdump --version
   cat -n ${ENV_FILE}
+else
+  export PCAP_SUPERVISOR_OUTPUT='/dev/null'
 fi
 
 trap 'kill -TERM $PCAP_PID' TERM INT
