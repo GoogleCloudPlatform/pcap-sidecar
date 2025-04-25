@@ -97,9 +97,7 @@ The pcap sidecar has images that are compatible with both [Cloud Run execution e
    # public image compatible with both gen1 & gen2. Alternatively build your own
    export PCAP_SIDECAR_IMAGE_URI='us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar:latest'
 
-   export PCAP_GCS_BUCKET='...'        # the name of the Cloud Storage Bucket to mount.
    export PCAP_L4_PROTOS='...'         # transport layer protocols to filter on i/e: `tcp`
-   export PCAP_JSON_LOG=true           # set to `true` for writting structured logs into Cloud Logging.
    ```
 
 2. Deploy the Cloud Run service including the `pcap` sidecar:
@@ -120,7 +118,7 @@ gcloud run deploy ${SERVICE_NAME} \
   --container=${PCAP_SIDECAR_NAME} \
   --image=${PCAP_SIDECAR_IMAGE_URI} \
   --cpu=1 --memory=1G \
-  --set-env-vars="PCAP_GCS_BUCKET=${PCAP_GCS_BUCKET},PCAP_L4_PROTOS=${PCAP_L4_PROTOS},PCAP_JSON_LOG=${PCAP_JSON_LOG}"
+  --set-env-vars="PCAP_L4_PROTOS=${PCAP_L4_PROTOS}"
 ```
 
 > See the full list of available flags for `gcloud run deploy` at https://cloud.google.com/sdk/gcloud/reference/run/deploy
@@ -147,25 +145,25 @@ gcloud run deploy ${SERVICE_NAME} \
 >
 > You can optionally choose a different port by setting `PCAP_HC_PORT` as an env var of the `pcap` sidecar
 
-### Configure Cloud Storage Bucket for PCAP file upload
-
-1. Configure the Cloud Storage Bucket by giving the runtime service account the `roles/storage.admin` on the bucket so that it may create objects and read bucket metadata.
-
 ## Available configurations
 
 The **PCAP sidecar** accepts the following environment variables:
 
 **Output format controls:**
 
-- `PCAP_GCS_BUCKET`: (STRING, **required**) the name of the Cloud Storage Bucket to be mounted and used to store **PCAP files**. Ensure that you provide the runtime service account the `roles/storage.admin` so that it may create objects and read bucket metadata.
-
-- `PCAP_JSON_LOG`: (BOOLEAN, _optional_) wheter to write `JSON` translated packets into `stdout` ( `PCAP_JSON` may not be enabled ); default value is `false`.
+- `PCAP_JSON_LOG`: (BOOLEAN, _optional_) wheter to write `JSON` translated packets into `stdout` (projects by default sink these logs into Cloud Logging) ( `PCAP_JSON` does not need to be enabled for this to work ); default value is `true`.
 
   > This is useful when [`Wireshark`](https://www.wireshark.org/) is not available, as it makes it possible to have all captured packets available in [**Cloud Logging**](https://cloud.google.com/logging/docs/structured-logging)
 
-- `PCAP_TCPDUMP`: (BOOLEAN, _required_) whether to use `tcpdump` or not ( `tcpdump` will generate pcap files, if not `PCAP_JSON` must be enabled ) and push those `.pcap` files to GCS; default valie is `true`.
+- `PCAP_GCS_BUCKET`: (STRING, _optional_) the name of the Cloud Storage Bucket used to store **PCAP files**. If not provided, no files will pushed to GCS and `PCAP_GCS_FUSE`, `PCAP_TCPDUMP`, & `PCAP_JSON` will be set to `false` and are effectively disabled.
 
-- `PCAP_JSON`: (BOOLEAN, _optional_) whether to use `JSON` to dump packets or not into GCS ; default value is `false`.
+  > Ensure that you provide the runtime service account the `roles/storage.admin` so that it may create objects and read bucket metadata.
+
+- `PCAP_GCS_FUSE`: (BOOLEAN, _optional_, requires: `PCAP_GCS_BUCKET`) whether to use GCSFuse (`true`) or GCS client library (`false`) to push pcap files to GCS. When `PCAP_GCS_BUCKET` is not set this field does nothing; default value is `true` when `PCAP_GCS_BUCKET` is set.
+
+- `PCAP_TCPDUMP`: (BOOLEAN, _optional_, requires: `PCAP_GCS_BUCKET`) whether to use `tcpdump` or not ( `tcpdump` will generate pcap files, if not `PCAP_JSON` must be enabled ) and push those `.pcap` files to GCS; default value is `true` when `PCAP_GCS_BUCKET` is set.
+
+- `PCAP_JSON`: (BOOLEAN, _optional_, requires: `PCAP_GCS_BUCKET`) whether to use `JSON` to dump packets or not into GCS ; default value is `false`.
 
   > `PCAP_TCPDUMP` and `PCAP_JSON` maybe be both `true` in order to generate both: `.pcap` and `.json` **PCAP files** that are stored in GCS.
 
