@@ -348,6 +348,24 @@ func (x *libraryExporter) newWriter(
 	return writer
 }
 
+func (x *libraryExporter) onExported(
+	cw ClosableWriter,
+	src *string,
+	tgt *string,
+	size *int64,
+) error {
+	x.logger.LogFsEvent(
+		zapcore.InfoLevel,
+		sf.Format("sent {0} bytes into gs://{1}/{2}", *size, x.bucket, *tgt),
+		PCAP_EXPORT,
+		*src,
+		*tgt,
+		*size,
+		nil)
+
+	return cw.Close()
+}
+
 func (x *libraryExporter) Export(
 	ctx context.Context,
 	srcPcapFile *string,
@@ -363,26 +381,7 @@ func (x *libraryExporter) Export(
 
 	writer := x.newWriter(ctx, srcPcapFile, &tgtPcapFile, object)
 
-	pcapBytes, err := x.export(
-		srcPcapFile, &tgtPcapFile,
-		writer,
-		compress, delete,
-		func(
-			src *string,
-			tgt *string,
-			size *int64,
-		) error {
-			x.logger.LogFsEvent(
-				zapcore.InfoLevel,
-				sf.Format("sent {0} bytes into gs://{1}/{2}", *size, x.bucket, *tgt),
-				PCAP_EXPORT,
-				*src,
-				*tgt,
-				*size,
-				nil)
-
-			return writer.Close()
-		})
+	pcapBytes, err := x.export(srcPcapFile, &tgtPcapFile, writer, compress, delete, x.onExported)
 
 	return &tgtPcapFile, &pcapBytes, err
 }

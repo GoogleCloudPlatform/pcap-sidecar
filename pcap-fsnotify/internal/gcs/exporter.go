@@ -55,6 +55,13 @@ type (
 	nilExporter struct {
 		*exporter
 	}
+
+	exportCallback func(
+		cw ClosableWriter,
+		srcPcapFile *string,
+		tgtPcapFile *string,
+		pcapBytes *int64,
+	) error
 )
 
 const (
@@ -131,7 +138,7 @@ func (x *exporter) export(
 	outputPcapWriter ClosableWriter,
 	compress bool,
 	delete bool,
-	cb func(*string, *string, *int64) error,
+	callback exportCallback,
 ) (int64, error) {
 	pcapBytes := int64(0)
 
@@ -174,7 +181,7 @@ func (x *exporter) export(
 		return pcapBytes, errors.Wrapf(err, "failed to COPY file: %s", *srcPcapFile)
 	}
 
-	err = outputPcapWriter.Close()
+	// closing `outputPcapWriter` is responsibility of the caller of this method
 	inputPcapWriter.Close()
 
 	if err != nil {
@@ -190,10 +197,18 @@ func (x *exporter) export(
 			sf.Format("failed to COPY file: {0}", *srcPcapFile))
 	}
 
-	if err = cb(srcPcapFile, tgtPcapFile, &pcapBytes); err != nil {
+	if err = callback(
+		outputPcapWriter,
+		srcPcapFile,
+		tgtPcapFile,
+		&pcapBytes,
+	); err != nil {
 		x.logger.LogFsEvent(
 			zapcore.ErrorLevel,
-			sf.Format("failed to EXPORT file: {0}", *srcPcapFile),
+			sf.Format(
+				"failed to EXPORT file: {0}",
+				*srcPcapFile,
+			),
 			PCAP_EXPORT,
 			*srcPcapFile,
 			*tgtPcapFile,
@@ -218,7 +233,10 @@ func (x *exporter) export(
 		if err != nil {
 			x.logger.LogFsEvent(
 				zapcore.ErrorLevel,
-				sf.Format("failed to DELETE file: {0}", *srcPcapFile),
+				sf.Format(
+					"failed to DELETE file: {0}",
+					*srcPcapFile,
+				),
 				PCAP_EXPORT,
 				*srcPcapFile,
 				*tgtPcapFile,
@@ -227,7 +245,10 @@ func (x *exporter) export(
 		} else {
 			x.logger.LogFsEvent(
 				zapcore.InfoLevel,
-				sf.Format("DELETED: {0}", *srcPcapFile),
+				sf.Format(
+					"DELETED: {0}",
+					*srcPcapFile,
+				),
 				PCAP_EXPORT,
 				*srcPcapFile,
 				*tgtPcapFile,

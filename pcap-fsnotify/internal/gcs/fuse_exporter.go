@@ -42,6 +42,27 @@ func (x *fuseExporter) newFile(
 	)
 }
 
+func (x *fuseExporter) onExported(
+	cw ClosableWriter,
+	src *string,
+	tgt *string,
+	size *int64,
+) error {
+	x.logger.LogFsEvent(
+		zapcore.InfoLevel,
+		sf.Format(
+			"copied {0} bytes into file: {1}",
+			*size, *tgt,
+		),
+		PCAP_EXPORT,
+		*src,
+		*tgt,
+		*size,
+		nil)
+
+	return cw.Close()
+}
+
 func (x *fuseExporter) Export(
 	ctx context.Context,
 	srcPcapFile *string,
@@ -70,26 +91,7 @@ func (x *fuseExporter) Export(
 
 	pcapBytes, err = retry.DoWithData(func() (int64, error) {
 		// Copy source PCAP into destination PCAP directory, compressing destination PCAP is optional
-		return x.export(
-			srcPcapFile, &tgtPcapFile,
-			pcapFileWriter,
-			compress, delete,
-			func(
-				src *string,
-				tgt *string,
-				size *int64,
-			) error {
-				x.logger.LogFsEvent(
-					zapcore.InfoLevel,
-					sf.Format("copied {0} bytes into file: {1}", *size, *tgt),
-					PCAP_EXPORT,
-					*src,
-					*tgt,
-					*size,
-					nil)
-
-				return pcapFileWriter.Close()
-			})
+		return x.export(srcPcapFile, &tgtPcapFile, pcapFileWriter, compress, delete, x.onExported)
 	},
 		retry.Context(ctx),
 		retry.Attempts(x.maxRetries),
@@ -98,7 +100,10 @@ func (x *fuseExporter) Export(
 		retry.OnRetry(func(attempt uint, err error) {
 			x.logger.LogEvent(
 				zapcore.WarnLevel,
-				sf.Format("failed to COPY file at attempt {0}: {1}", attempt+1, *srcPcapFile),
+				sf.Format(
+					"failed to COPY file at attempt {0}: {1}",
+					attempt+1, *srcPcapFile,
+				),
 				PCAP_EXPORT,
 				map[string]any{
 					"source":  *srcPcapFile,
