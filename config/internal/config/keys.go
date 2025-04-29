@@ -14,7 +14,7 @@ type (
 	ctxVarType string
 
 	ctxVar struct {
-		key      CtxKey
+		path     string
 		typ      ctxVarType
 		required bool
 	}
@@ -24,12 +24,16 @@ const (
 	ctxKeyPrefix       = "pcap"
 	ctxKeyTemplate     = "pcap/config/{0}"
 	ctxKeyPathTemplate = "{0}.{1}"
+)
 
+const (
 	DebugKey      = CtxKey("debug")
 	ExecEnvKey    = CtxKey("execEnv")
 	InstanceIDKey = CtxKey("instance-id")
 	VerbosityKey  = CtxKey("verbosity")
+)
 
+const (
 	TYPE_STRING  = "string"
 	TYPE_BOOLEAN = "boolean"
 )
@@ -40,11 +44,11 @@ var (
 	unavailableConfigErr  = errors.New("config not found")
 )
 
-var ctxVars = map[string]*ctxVar{
+var ctxVars = map[CtxKey]*ctxVar{
 	// map from `path in JSON config` to `Context Variable`
 	// NOTE: keys are automatically prefixed with `pcap.`
-	"debug":     {DebugKey, TYPE_BOOLEAN, false},
-	"verbosity": {VerbosityKey, TYPE_STRING, false},
+	DebugKey:     {"debug", TYPE_BOOLEAN, false},
+	VerbosityKey: {"verbosity", TYPE_STRING, false},
 }
 
 func getEnvVar() {
@@ -90,18 +94,18 @@ func (k *CtxKey) ToCtxKey() string {
 }
 
 func newCtxKeyPath(
-	key *string,
+	v *ctxVar,
 ) string {
-	return sf.Format(ctxKeyPathTemplate, ctxKeyPrefix, *key)
+	return sf.Format(ctxKeyPathTemplate, ctxKeyPrefix, v.path)
 }
 
 func setCtxVar(
 	ctx context.Context,
 	ktx *koanf.Koanf,
-	key *string,
+	k *CtxKey,
 	v *ctxVar,
 ) (context.Context, error) {
-	path := newCtxKeyPath(key)
+	path := newCtxKeyPath(v)
 	var value any = nil
 
 	isAvailable := ktx.Exists(path)
@@ -109,7 +113,7 @@ func setCtxVar(
 	if v.required && !isAvailable {
 		return ctx, newUnavailableConfigError(&path)
 	} else if !isAvailable {
-		if envVar, ok := envVars[v.key]; ok {
+		if envVar, ok := envVars[*k]; ok {
 			ktx.Set(path, envVar.defaultValue)
 		} else {
 			return ctx, newIllegalConfigStateError(&path)
@@ -125,8 +129,7 @@ func setCtxVar(
 		return ctx, newInvalidConfigValueTypeError(&path)
 	}
 
-	return context.WithValue(ctx,
-		v.key.ToCtxKey(), value), nil
+	return context.WithValue(ctx, k.ToCtxKey(), value), nil
 }
 
 func LoadContext(
@@ -137,7 +140,7 @@ func LoadContext(
 		if _ctx, err := setCtxVar(ctx, ktx, &k, v); err == nil {
 			ctx = _ctx
 		} else {
-			ctx = context.WithValue(ctx, v.key.ToCtxKey(), err)
+			ctx = context.WithValue(ctx, k.ToCtxKey(), err)
 		}
 	}
 	return ctx

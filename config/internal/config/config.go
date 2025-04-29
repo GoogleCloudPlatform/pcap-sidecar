@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/go-jsonnet"
+	"github.com/spf13/pflag"
 )
 
 func newConfigFile(
@@ -46,16 +47,22 @@ func saveConfig(
 	}
 }
 
-func newVM() *jsonnet.VM {
+func newVM(
+	flags *pflag.FlagSet,
+) *jsonnet.VM {
 	vm := jsonnet.MakeVM()
-	return loadEnvironmentVariables(vm)
+	return loadFlagVariables(
+		// flags override environment variables
+		loadEnvironmentVariables(vm),
+		flags)
 }
 
 func CreateJSON(
 	templatePath *string,
 	configPath *string,
+	flags *pflag.FlagSet,
 ) error {
-	if cfg, err := newVM().
+	if cfg, err := newVM(flags).
 		EvaluateFile(*templatePath); err == nil {
 		return saveConfig(configPath, &cfg)
 	} else {
