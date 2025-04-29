@@ -23,6 +23,8 @@ LABEL org.opencontainers.image.description="Cloud Run PCAP sidecar"
 
 USER 0:0
 
+COPY ./licensing/third_party_licenses/LICENSES.csv /third_party_licenses/LICENSES.csv
+COPY ./LICENSE /LICENSE
 COPY ./bin /bin
 COPY ./scripts /scripts
 COPY ./pcap.conf /pcap.conf

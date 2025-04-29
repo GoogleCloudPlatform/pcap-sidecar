@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -x
+
+mkdir -p licensing/third_party_licenses
+
+rm -f licensing/third_party_licenses/LICENSES.csv
+
+find . -type f -name '*.go' \
+| xargs -I% dirname % \
+| sort \
+| uniq \
+| grep -v 'gcsfuse' \
+| sed -e 's;./;;' \
+| xargs -I% bash -c 'cd % && go-licenses report github.com/GoogleCloudPlatform/pcap-sidecar/% --ignore github.com/GoogleCloudPlatform/pcap-sidecar && cd - >/dev/null' \
+| sort \
+| uniq \
+>> licensing/third_party_licenses/LICENSES.csv
