@@ -24,6 +24,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify/internal/log"
+	"github.com/avast/retry-go/v4"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/googleapis/gax-go/v2/callctx"
 	"github.com/pkg/errors"
@@ -120,6 +121,41 @@ func (x *libraryExporter) gcsRemoteAddr(
 	return sf.Format("{0}:{1}", *gcsEndpoint, gcsPort)
 }
 
+func (x *libraryExporter) connect(
+	ctx context.Context,
+	address *string,
+) (net.Conn, error) {
+	addr := *address
+
+	return retry.DoWithData(
+		func() (net.Conn, error) {
+			// [ToDo]: set network to `tcp4` only when VPC for ALL egress networking is used; otherwise, use `tcp`:
+			//   - when VPC is used for ALL egress networking, IPv4 is the only protocol supported for external hosts
+			//   - network is currently set to `tcp4` to support ALL egress networking configurations.
+			return x.dialer.DialContext(ctx, "tcp4", addr)
+		},
+		retry.Context(ctx),
+		retry.Attempts(30),
+		retry.Delay(1*time.Second),
+		retry.DelayType(retry.FixedDelay),
+		retry.OnRetry(func(
+			attempt uint,
+			err error,
+		) {
+			_attempt := (attempt + 1)
+			x.logger.LogEvent(
+				zapcore.WarnLevel,
+				sf.Format("failed to connect at attempt {0}: {1}", _attempt, addr),
+				PCAP_EXPORT,
+				map[string]any{
+					"address": *address,
+					"attempt": addr,
+				},
+				err)
+		}),
+	)
+}
+
 func (x *libraryExporter) dialContext(
 	ctx context.Context,
 	addr string,
@@ -132,11 +168,15 @@ func (x *libraryExporter) dialContext(
 		"bucket":   x.bucket,
 	}
 
-	// [ToDo]: set network to `tcp4` only when VPC for ALL egress networking is used; otherwise, use `tcp`:
-	//   - when VPC is used for ALL egress networking, IPv4 is the only protocol supported for external hosts
-	//   - network is currently set to `tcp4` to support ALL egress networking configurations.
-	if conn, err := x.dialer.
-		DialContext(ctx, "tcp4", address); err == nil {
+	if conn, err := x.connect(ctx, &address); err != nil {
+		x.logger.LogEvent(
+			zapcore.ErrorLevel,
+			sf.Format("failed to connect to GCS: {0}", address),
+			PCAP_EXPORT,
+			data,
+			err)
+		return nil, err
+	} else {
 		remoteAddrStr := conn.RemoteAddr().String()
 
 		info := map[string]any{
@@ -151,15 +191,8 @@ func (x *libraryExporter) dialContext(
 			PCAP_EXPORT,
 			info,
 			nil)
+
 		return conn, nil
-	} else {
-		x.logger.LogEvent(
-			zapcore.ErrorLevel,
-			sf.Format("failed to connect to GCS: {0}", address),
-			PCAP_EXPORT,
-			data,
-			err)
-		return nil, err
 	}
 }
 
