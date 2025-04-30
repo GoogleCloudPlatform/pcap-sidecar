@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ARG PCAP_VERSION='0.0.0'
 ARG LIBPCAP_VERSION='1.10.5'
 ARG TCPDUMP_VERSION='4.99.5'
 
-FROM --platform=linux/amd64 pcap-sidecar:libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION}
+FROM --platform=linux/amd64 pcap-sidecar:v${PCAP_VERSION}_libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION}
 
 ARG PCAP_RT_ENV='cloud_run_gen2'
 
@@ -23,8 +24,9 @@ LABEL org.opencontainers.image.description="Cloud Run PCAP sidecar"
 
 USER 0:0
 
-COPY ./licensing/third_party_licenses/LICENSES.csv /third_party_licenses/LICENSES.csv
 COPY ./LICENSE /LICENSE
+COPY ./licensing/third_party_licenses/LICENSES.csv /third_party_licenses/LICENSES.csv
+
 COPY ./bin /bin
 COPY ./scripts /scripts
 COPY ./pcap.conf /pcap.conf
@@ -33,6 +35,7 @@ COPY ./env/${PCAP_RT_ENV}.env /env/rt.env
 
 # import env files for ALL supervised processes
 COPY ./env/tcpdumpw.env /env/tcpdumpw.env
+COPY ./env/pcapcfg.env /env/pcapcfg.env
 COPY ./env/pcapfsn.env /env/pcapfsn.env
 COPY ./env/gcsdir.env /env/gcsdir.env
 COPY ./env/gcsfuse.env /env/gcsfuse.env

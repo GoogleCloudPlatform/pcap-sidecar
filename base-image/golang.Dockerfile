@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ARG PCAP_VERSION='0.0.0'
 ARG GOLANG_VERSION='1.23.7'
 ARG LIBPCAP_VERSION='1.10.5'
 ARG TCPDUMP_VERSION='4.99.5'
 
-FROM pcap-base:libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION} AS base
+FROM pcap-base:v${PCAP_VERSION}_libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION} AS base
 
 ARG GOLANG_VERSION='1.23.7'
 

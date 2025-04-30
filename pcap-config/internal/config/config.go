@@ -23,6 +23,11 @@ import (
 	"github.com/spf13/pflag"
 )
 
+var (
+	Build   string
+	Version string
+)
+
 func newConfigFile(
 	jsonConfigPath *string,
 ) (*os.File, error) {

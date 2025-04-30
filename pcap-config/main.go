@@ -18,8 +18,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/GoogleCloudPlatform/pcap-sidecar/config/internal/config"
-	cfg "github.com/GoogleCloudPlatform/pcap-sidecar/config/internal/config"
+	cfg "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
 	"github.com/spf13/pflag"
 	flag "github.com/spf13/pflag"
 	sf "github.com/wissance/stringFormatter"
@@ -35,9 +34,11 @@ func registerFlags(
 }
 
 func main() {
+	log.Println(sf.Format("PCAP sidecar @{0}/{1}", cfg.Version, cfg.Build))
+
 	flags := flag.NewFlagSet("pcap", flag.ContinueOnError)
 
-	config.RegisterFlags(registerFlags(flags))
+	cfg.RegisterFlags(registerFlags(flags))
 
 	flags.Parse(os.Args[1:])
 

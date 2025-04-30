@@ -34,8 +34,10 @@ var (
 )
 
 var ctxVars = map[CtxKey]*ctxVar{
-	// map from `path in JSON config` to `Context Variable`
+	// map from `Context Key` to `Context Variable`
 	// NOTE: keys are automatically prefixed with `pcap.`
+	BuildKey:          {"build", TYPE_STRING, true},
+	VersionKey:        {"version", TYPE_STRING, true},
 	DebugKey:          {"debug", TYPE_BOOLEAN, false},
 	VerbosityKey:      {"verbosity", TYPE_STRING, false},
 	ExecEnvKey:        {"env.id", TYPE_STRING, false},

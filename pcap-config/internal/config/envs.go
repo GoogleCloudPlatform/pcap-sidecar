@@ -44,6 +44,16 @@ const (
 )
 
 var envVars = map[CtxKey]*variable{
+	BuildKey: {
+		"build",
+		Build,
+		"PCAP sidecar's build/commit id",
+	},
+	VersionKey: {
+		"version",
+		Version,
+		"PCAP sidecar's version",
+	},
 	DebugKey: {
 		"debug",
 		"false",
@@ -74,6 +84,15 @@ var envVars = map[CtxKey]*variable{
 		"tcp,udp",
 		"list of transport layer protocols that should be captured",
 	},
+}
+
+func setEnvVarDefaultValue(
+	ctxKey CtxKey,
+	defaultValue *string,
+) {
+	if envVar, ok := envVars[ctxKey]; ok {
+		envVar.defaultValue = *defaultValue
+	}
 }
 
 func newEnvVarKey(

@@ -16,13 +16,27 @@ version: "3"
 
 dotenv: [".env"]
 
+vars:
+  DEFAULT_VERSION: 0.0.0
+  GO_MODULE: github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config
+  GIT_COMMIT:
+    sh: git rev-parse HEAD
+
 tasks:
+  version:
+    cmds:
+      - >-
+        echo "version: {{.DEFAULT_VERSION}}/{{.GIT_COMMIT}}"
+
   docker-build:
     cmds:
+      - echo "building version {{.DEFAULT_VERSION}}-docker/{{.GIT_COMMIT}}"
       - >-
         docker buildx build
         --platform=linux/amd64
         --no-cache --file=Dockerfile
+        --build-arg="PCAP_VERSION={{.DEFAULT_VERSION}}-docker"
+        --build-arg="PCAP_COMMIT_ID={{.GIT_COMMIT}}"
         --build-arg="BIN_NAME=$PCAP_CFG_BIN_NAME"
         --output={{.USER_WORKING_DIR}}
         --target=releaser {{.USER_WORKING_DIR}}
@@ -43,9 +57,14 @@ tasks:
   build:
     dotenv: [".env"]
     cmds:
+      - echo "building version {{.DEFAULT_VERSION}}-local/{{.GIT_COMMIT}}"
       - task: go-fmt
+      - rm -rvf ./bin/*
       - >-
         go build -a
+        -ldflags
+        "-X {{.GO_MODULE}}/internal/config.Version={{.DEFAULT_VERSION}}-local
+        -X {{.GO_MODULE}}/internal/config.Build={{.GIT_COMMIT}}"
         -o bin/$PCAP_CFG_BIN_NAME
         {{if .VERBOSE}}-v -a{{end}}
         main.go
