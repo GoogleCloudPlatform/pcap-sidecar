@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-version: '3'
+version: "3"
 
-dotenv: ['.env']
+dotenv: [".env"]
 
 tasks:
-
   docker-build:
     cmds:
       - >-
@@ -28,14 +27,18 @@ tasks:
         --output={{.USER_WORKING_DIR}}
         --target=releaser {{.USER_WORKING_DIR}}
     sources:
-      - ./main.go
+      - go.mod
+      - go.sum
+      - main.go
+      - internal/**/*.go
 
   go-fmt:
     cmds:
       - gofumpt -l -w ./main.go
+      - gofumpt -l -w ./internal/
 
   build:
-    dotenv: ['.env']
+    dotenv: [".env"]
     cmds:
       - task: go-fmt
       - >-
@@ -44,7 +47,10 @@ tasks:
         {{if .VERBOSE}}-v -a{{end}}
         main.go
     sources:
-      - ./main.go
+      - go.mod
+      - go.sum
+      - main.go
+      - internal/**/*.go
 
   local-dist:
     cmds:

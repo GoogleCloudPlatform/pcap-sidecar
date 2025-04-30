@@ -17,53 +17,36 @@ version: "3"
 dotenv: [".env"]
 
 tasks:
-  update-gitmodules:
-    cmds:
-      - git submodule update --recursive --remote ../pcap-cli
-
   docker-build:
-    requires:
-      vars: [ENV]
-    vars:
-      RUNTIME_ENVIRONMENT: '{{default "cloud_run_gen2" .ENV}}'
-    dotenv:
-      - "{{.USER_WORKING_DIR}}/../env/{{.RUNTIME_ENVIRONMENT}}.env"
     cmds:
-      - task: update-gitmodules
       - >-
         docker buildx build
         --platform=linux/amd64
         --no-cache --file=Dockerfile
-        --build-arg="BIN_NAME=$TCPDUMPW_BIN_NAME"
-        --build-arg="LIBPCAP_VERSION=$LIBPCAP_VERSION"
-        --build-arg="TCPDUMP_VERSION=$TCPDUMP_VERSION"
-        --output={{.USER_WORKING_DIR}}/bin
+        --build-arg="BIN_NAME=$PCAP_CFG_BIN_NAME"
+        --output={{.USER_WORKING_DIR}}
         --target=releaser {{.USER_WORKING_DIR}}
     sources:
       - go.mod
       - go.sum
       - main.go
       - pkk/**/*.go
+      - internal/**/*.go
+      - pcap.jsonnet
 
   go-fmt:
     cmds:
-      - gofumpt -l -w .
+      - gofumpt -l -w ./main.go
+      - gofumpt -l -w ./internal/
+      - gofumpt -l -w ./pkg/
 
-  go-gen:
-    cmds:
-      - go generate ./...
-
-  local-build:
+  build:
     dotenv: [".env"]
     cmds:
-      - task: update-gitmodules
       - task: go-fmt
-      - task: go-gen
-      - go mod tidy -compat=$GOLANG_VERSION
       - >-
-        go build
-        -tags json
-        -o bin/$TCPDUMPW_BIN_NAME
+        go build -a
+        -o bin/$PCAP_CFG_BIN_NAME
         {{if .VERBOSE}}-v -a{{end}}
         main.go
     sources:
@@ -71,6 +54,8 @@ tasks:
       - go.sum
       - main.go
       - pkk/**/*.go
+      - internal/**/*.go
+      - pcap.jsonnet
 
   local-dist:
     cmds:
