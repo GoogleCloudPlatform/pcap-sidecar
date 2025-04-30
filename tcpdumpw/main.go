@@ -37,11 +37,12 @@ import (
 	_ "time/tzdata"
 
 	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli/pkg/pcap"
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/pkg/config"
 	"github.com/alphadose/haxmap"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/gofrs/flock"
 	"github.com/google/uuid"
-	"github.com/wissance/stringFormatter"
+	sf "github.com/wissance/stringFormatter"
 
 	pcapFilter "github.com/GoogleCloudPlatform/pcap-sidecar/tcpdumpw/pkg/filter"
 )
@@ -49,6 +50,8 @@ import (
 func UNUSED(x ...interface{}) {}
 
 var (
+	pcap_config = flag.String("config", "/pcap.json", "PCAP sidecar's config")
+
 	use_cron       = flag.Bool("use_cron", false, "perform packet capture at specific intervals")
 	cron_exp       = flag.String("cron_exp", "", "stardard cron expression; i/e: '1 * * * *'")
 	timezone       = flag.String("timezone", "UTC", "TimeZone to be used to schedule packet captures")
@@ -566,7 +569,7 @@ func appendFilter(
 
 	filter := factory(rawFilter, compatFilters)
 	filters = append(filters, filter)
-	jlog(INFO, &emptyTcpdumpJob, stringFormatter.Format("using filter: {0}", filter.String()))
+	jlog(INFO, &emptyTcpdumpJob, sf.Format("using filter: {0}", filter.String()))
 
 	return filters
 }
@@ -610,10 +613,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		if r := recover(); r != nil {
-			jlog(FATAL, &emptyTcpdumpJob, stringFormatter.Format("panic: {0}", r))
+			jlog(FATAL, &emptyTcpdumpJob, sf.Format("panic: {0}", r))
 			fmt.Fprintln(os.Stderr, string(debug.Stack()))
 		}
 	}()
+
+	// load config into context
+	if _ctx, cfgErr := config.LoadJSON(ctx, *pcap_config); cfgErr == nil {
+		ctx = _ctx
+		jlog(INFO, &emptyTcpdumpJob, sf.Format("loaded config: {0}", config.GetVersion(ctx)))
+	} else {
+		jlog(ERROR, &emptyTcpdumpJob, sf.Format("failed to load config: {0} => {1}", *pcap_config, cfgErr.Error()))
+	}
 
 	jid.Store(uuid.Nil)
 	xid.Store(uuid.Nil)
@@ -636,7 +647,7 @@ func main() {
 
 		ipFilterProvider := pcapFilter.NewIPFilterProvider(ipv4, ipv6, hosts, compatFilters)
 		if _, ok := ipFilterProvider.Get(ctx); ok {
-			jlog(INFO, &emptyTcpdumpJob, stringFormatter.Format("using filter: {0}", ipFilterProvider.String()))
+			jlog(INFO, &emptyTcpdumpJob, sf.Format("using filter: {0}", ipFilterProvider.String()))
 			filters = append(filters, ipFilterProvider)
 		}
 
