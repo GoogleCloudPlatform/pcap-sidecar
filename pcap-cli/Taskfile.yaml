@@ -16,6 +16,11 @@ version: "3"
 
 dotenv: [".env"]
 
+vars:
+  GO_MODULE: github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli
+  GIT_COMMIT:
+    sh: git rev-parse HEAD
+
 tasks:
   clean:
     cmds:
@@ -57,7 +62,7 @@ tasks:
       - >-
         go build
         -o bin/$PCAP_BIN_NAME
-        -tags json,text,proto
+        -tags json,proto
         {{if .VERBOSE}}-v -a{{end}}
         cmd/pcap.go
 

@@ -16,6 +16,11 @@ version: "3"
 
 dotenv: [".env"]
 
+vars:
+  GO_MODULE: github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify
+  GIT_COMMIT:
+    sh: git rev-parse HEAD
+
 tasks:
   docker-build:
     cmds:

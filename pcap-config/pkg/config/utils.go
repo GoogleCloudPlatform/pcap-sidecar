@@ -18,7 +18,7 @@ import (
 	"context"
 	"errors"
 
-	c "github.com/GoogleCloudPlatform/pcap-sidecar/config/internal/config"
+	c "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
 )
 
 var UnavailableConfigError = errors.New("")
@@ -78,6 +78,17 @@ func getString(
 	return "", UnavailableConfigError
 }
 
+func getStringOrDefault(
+	ctx context.Context,
+	key c.CtxKey,
+	defaultValue *string,
+) string {
+	if value, err := getString(ctx, key); err == nil {
+		return value
+	}
+	return *defaultValue
+}
+
 func GetDebug(
 	ctx context.Context,
 ) (bool, error) {
@@ -106,4 +117,16 @@ func GetVerbosity(
 	ctx context.Context,
 ) (PcapVerbosity, error) {
 	return GetVerbosityOrDefault(ctx, PCAP_VERBOSITY_DEBUG)
+}
+
+func GetBuild(
+	ctx context.Context,
+) string {
+	return getStringOrDefault(ctx, c.BuildKey, &c.Build)
+}
+
+func GetVersion(
+	ctx context.Context,
+) string {
+	return getStringOrDefault(ctx, c.VersionKey, &c.Version)
 }

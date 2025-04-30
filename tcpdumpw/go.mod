@@ -11,7 +11,7 @@ require (
 	github.com/gofrs/flock v0.12.1
 	github.com/google/uuid v1.6.0
 	github.com/ochinchina/supervisord/xmlrpcclient v0.0.0-20210503132557-74b0760cc12e
-	github.com/wissance/stringFormatter v1.2.0
+	github.com/wissance/stringFormatter v1.4.1
 )
 
 require (
@@ -49,10 +49,13 @@ require (
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f // indirect
 	golang.org/x/net v0.36.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/term v0.29.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
 
-replace github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli => ../pcap-cli
+replace (
+	github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli => ../pcap-cli
+	github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config => ../pcap-config
+)

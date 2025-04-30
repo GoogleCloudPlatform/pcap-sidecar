@@ -13,23 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ARG PCAP_VERSION='0.0.0'
 ARG GOLANG_VERSION='1.23.7'
 ARG LIBPCAP_VERSION='1.10.5'
 ARG TCPDUMP_VERSION='4.99.5'
 
-FROM --platform=linux/amd64 pcap-golang:libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION} AS builder
+FROM --platform=linux/amd64 pcap-golang:v${PCAP_VERSION}_libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION} AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BIN_NAME='tcpdumpw'
+
+ARG GO_MODULE='github.com/GoogleCloudPlatform/pcap-sidecar/tcpdumpw'
 
 # include PCAP CLI
 WORKDIR /app/pcap-cli
 
 COPY ./pcap-cli/go.mod go.mod
 COPY ./pcap-cli/go.sum go.sum
-COPY ./pcap-cli/internal internal
 COPY ./pcap-cli/pkg pkg
 COPY ./pcap-cli/schema schema
+COPY ./pcap-cli/internal internal
+
+# include config
+WORKDIR /app/config
+
+COPY ./pcap-config/go.mod go.mod
+COPY ./pcap-config/go.sum go.sum
+COPY ./pcap-config/main.go main.go
+COPY ./pcap-config/pkg pkg
+COPY ./pcap-config/internal internal
 
 WORKDIR /app/tcpdumpw
 
@@ -41,11 +53,12 @@ COPY ./tcpdumpw/pkg pkg
 ENV GOOS=linux
 ENV GOARCH=amd64
 
-RUN go install mvdan.cc/gofumpt@latest \
-  && gofumpt -l -w ./main.go \
-  && go mod tidy -compat="${GOLANG_VERSION}" \
-  && go mod download \
-  && go build -a -v -tags json -o /app/tcpdumpw/bin/${BIN_NAME} main.go
+RUN go install mvdan.cc/gofumpt@latest
+RUN gofumpt -l -w .
+
+RUN go mod tidy -compat="${GOLANG_VERSION}"
+RUN go mod download
+RUN go build -a -v -tags json -o /app/tcpdumpw/bin/${BIN_NAME} main.go
 
 FROM scratch AS releaser
 COPY --link --from=builder /app/tcpdumpw/bin/${BIN_NAME} /

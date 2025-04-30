@@ -22,7 +22,10 @@ ARG GOLANG_VERSION='1.23.7'
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BIN_NAME=pcap
 
+ARG GO_MODULE='github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli'
+
 WORKDIR /app
+
 ADD . /app
 
 USER 0:0
@@ -42,7 +45,7 @@ RUN go mod download
 RUN gofumpt -l -w ./cmd/
 RUN gofumpt -l -w ./pkg/
 RUN go generate ./pkg/...
-RUN go build -a -v -tags json,text,proto -o /app/bin/${BIN_NAME} cmd/pcap.go
+RUN go build -a -v -tags json,proto -o /app/bin/${BIN_NAME} cmd/pcap.go
 
 FROM scratch AS releaser
 COPY --link --from=builder /app/bin/${BIN_NAME} /

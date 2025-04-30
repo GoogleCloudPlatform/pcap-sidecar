@@ -31,6 +31,8 @@ type (
 )
 
 const (
+	BuildKey          = CtxKey("build")
+	VersionKey        = CtxKey("version")
 	GcpRegionKey      = CtxKey("gcp/region")
 	ProjectIDKey      = CtxKey("gcp/project/id")
 	ProjectNumKey     = CtxKey("gcp/project/number")

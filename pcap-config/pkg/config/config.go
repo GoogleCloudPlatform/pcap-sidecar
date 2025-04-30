@@ -17,7 +17,7 @@ package config
 import (
 	"context"
 
-	"github.com/GoogleCloudPlatform/pcap-sidecar/config/internal/config"
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
 	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"

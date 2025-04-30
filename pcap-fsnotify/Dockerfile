@@ -22,6 +22,8 @@ ARG GOLANG_VERSION='1.23.7'
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BIN_NAME=pcapfsn
 
+ARG GO_MODULE='github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify'
+
 WORKDIR /app
 
 COPY ./pcap-fsnotify/go.mod go.mod
