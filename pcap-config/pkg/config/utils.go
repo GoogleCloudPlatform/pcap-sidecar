@@ -17,16 +17,42 @@ package config
 import (
 	"context"
 	"errors"
+	"reflect"
 
 	c "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
+	sf "github.com/wissance/stringFormatter"
 )
 
-var UnavailableConfigError = errors.New("")
+var (
+	UnavailableConfigError = errors.New("unavailable")
+	InvalidConfigTypeError = errors.New("invalid-type")
+)
 
-func newError(
+func newConfigError(
+	key c.CtxKey,
 	err error,
 ) error {
-	return errors.Join(UnavailableConfigError, err)
+	return errors.Join(
+		UnavailableConfigError,
+		errors.New(key.ToCtxKey()),
+		err,
+	)
+}
+
+func newInvalidConfigError(
+	key c.CtxKey,
+	want c.CtxVarType,
+	value any,
+) error {
+	return errors.Join(
+		InvalidConfigTypeError,
+		errors.New(
+			sf.Format(
+				"{0} has invalid type; want: {1}, got: {2}",
+				key.ToCtxKey(), string(want), reflect.TypeOf(value),
+			),
+		),
+	)
 }
 
 func contextKey(
@@ -45,10 +71,10 @@ func getBoolean(
 	if v, ok := value.(bool); ok {
 		return v, nil
 	} else if err, errOK := value.(error); errOK {
-		return false, newError(err)
+		return false, newConfigError(key, err)
+	} else {
+		return false, newInvalidConfigError(key, c.TYPE_BOOLEAN, v)
 	}
-
-	return false, UnavailableConfigError
 }
 
 func getBooleanOrDefault(
@@ -72,30 +98,78 @@ func getString(
 	if v, ok := value.(string); ok {
 		return v, nil
 	} else if err, errOK := value.(error); errOK {
-		return "", newError(err)
+		return "", newConfigError(key, err)
+	} else {
+		return "", newInvalidConfigError(key, c.TYPE_STRING, v)
 	}
-
-	return "", UnavailableConfigError
 }
 
 func getStringOrDefault(
 	ctx context.Context,
 	key c.CtxKey,
-	defaultValue *string,
+	defaultValue string,
 ) string {
 	if value, err := getString(ctx, key); err == nil {
 		return value
 	}
-	return *defaultValue
+	return defaultValue
 }
 
-func GetDebug(
+func getStrings(
+	ctx context.Context,
+	key c.CtxKey,
+) ([]string, error) {
+	k := contextKey(key)
+	value := ctx.Value(k)
+
+	if v, ok := value.([]string); ok {
+		return v, nil
+	} else if err, errOK := value.(error); errOK {
+		return nil, newConfigError(key, err)
+	} else {
+		return nil, newInvalidConfigError(key, c.TYPE_LIST_STRING, v)
+	}
+}
+
+func getUint16(
+	ctx context.Context,
+	key c.CtxKey,
+) (uint16, error) {
+	k := contextKey(key)
+	value := ctx.Value(k)
+
+	if v, ok := value.(uint16); ok {
+		return v, nil
+	} else if err, errOK := value.(error); errOK {
+		return 0, newConfigError(key, err)
+	} else {
+		return 0, newInvalidConfigError(key, c.TYPE_UINT16, v)
+	}
+}
+
+func getUint16s(
+	ctx context.Context,
+	key c.CtxKey,
+) ([]uint16, error) {
+	k := contextKey(key)
+	value := ctx.Value(k)
+
+	if v, ok := value.([]uint16); ok {
+		return v, nil
+	} else if err, errOK := value.(error); errOK {
+		return nil, newConfigError(key, err)
+	} else {
+		return nil, newInvalidConfigError(key, c.TYPE_LIST_UINT16, v)
+	}
+}
+
+func IsDebug(
 	ctx context.Context,
 ) (bool, error) {
 	return getBoolean(ctx, c.DebugKey)
 }
 
-func GetDebugOrDefault(
+func IsDebugOrDefault(
 	ctx context.Context,
 	defaultValue bool,
 ) bool {
@@ -122,11 +196,35 @@ func GetVerbosity(
 func GetBuild(
 	ctx context.Context,
 ) string {
-	return getStringOrDefault(ctx, c.BuildKey, &c.Build)
+	return getStringOrDefault(ctx, c.BuildKey, c.Build)
 }
 
 func GetVersion(
 	ctx context.Context,
 ) string {
-	return getStringOrDefault(ctx, c.VersionKey, &c.Version)
+	return getStringOrDefault(ctx, c.VersionKey, c.Version)
+}
+
+func GetFullVersion(
+	ctx context.Context,
+) string {
+	return sf.Format("{0}/{1}", GetVersion(ctx), GetBuild(ctx))
+}
+
+func GetFilter(
+	ctx context.Context,
+) string {
+	return getStringOrDefault(ctx, c.FilterKey, "DISABLED")
+}
+
+func GetHosts(
+	ctx context.Context,
+) ([]string, error) {
+	return getStrings(ctx, c.HostsFilterKey)
+}
+
+func GetPorts(
+	ctx context.Context,
+) ([]uint16, error) {
+	return getUint16s(ctx, c.PortsFilterKey)
 }

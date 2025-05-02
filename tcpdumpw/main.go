@@ -50,7 +50,7 @@ import (
 func UNUSED(x ...interface{}) {}
 
 var (
-	pcap_config = flag.String("config", "/pcap.json", "PCAP sidecar's config")
+	pcap_config = flag.String("config", "/cfg/pcap.json", "PCAP sidecar config")
 
 	use_cron       = flag.Bool("use_cron", false, "perform packet capture at specific intervals")
 	cron_exp       = flag.String("cron_exp", "", "stardard cron expression; i/e: '1 * * * *'")
@@ -188,21 +188,26 @@ func parsePcapVerbosity(
 func jlog(severity jLogLevel, job *tcpdumpJob, message string) {
 	now := time.Now()
 
-	j := *job
-	// this is safe as only 1 concurrent job execution is ever allowed.
-	j.Xid = xid.Load().(uuid.UUID).String()
-
 	entry := &jLogEntry{
 		Severity: severity,
 		Message:  message,
 		Sidecar:  sidecarEnvVar,
 		Module:   moduleEnvVar,
-		Job:      j,
-		Tags:     j.Tags,
-		Timestamp: map[string]int64{
-			"seconds": now.Unix(),
-			"nanos":   int64(now.Nanosecond()),
-		},
+	}
+
+	if job != nil {
+		j := *job
+		// this is safe as only 1 concurrent job execution is ever allowed.
+		j.Xid = xid.Load().(uuid.UUID).String()
+
+		entry.Job = j
+		entry.Tags = j.Tags
+
+	}
+
+	entry.Timestamp = map[string]int64{
+		"seconds": now.Unix(),
+		"nanos":   int64(now.Nanosecond()),
 	}
 
 	jEntry, err := json.Marshal(entry)
@@ -607,6 +612,18 @@ func parseEphemeralPorts(ephemerals *string) *pcap.PcapEphemeralPorts {
 	return ephemeralPortRange
 }
 
+func loadPcapConfig(
+	ctx context.Context,
+) (context.Context, error) {
+	// load config into context
+	if cfgCtx, cfgErr := config.
+		LoadJSON(ctx, *pcap_config); cfgErr == nil {
+		return cfgCtx, nil
+	} else {
+		return ctx, cfgErr
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -618,12 +635,11 @@ func main() {
 		}
 	}()
 
-	// load config into context
-	if _ctx, cfgErr := config.LoadJSON(ctx, *pcap_config); cfgErr == nil {
-		ctx = _ctx
-		jlog(INFO, &emptyTcpdumpJob, sf.Format("loaded config: {0}", config.GetVersion(ctx)))
+	if cfgCtx, cfgErr := loadPcapConfig(ctx); cfgErr == nil {
+		ctx = cfgCtx
+		jlog(INFO, nil, sf.Format("loaded config: {0}", config.GetFullVersion(ctx)))
 	} else {
-		jlog(ERROR, &emptyTcpdumpJob, sf.Format("failed to load config: {0} => {1}", *pcap_config, cfgErr.Error()))
+		jlog(ERROR, nil, sf.Format("failed to load config: {0} => {1}", *pcap_config, cfgErr.Error()))
 	}
 
 	jid.Store(uuid.Nil)

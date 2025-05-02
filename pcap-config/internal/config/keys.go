@@ -21,11 +21,11 @@ import (
 type (
 	CtxKey string
 
-	ctxVarType string
+	CtxVarType string
 
 	ctxVar struct {
 		path     string
-		typ      ctxVarType
+		typ      CtxVarType
 		required bool
 	}
 )
@@ -79,31 +79,32 @@ const (
 	TYPE_LIST = "[]{0}"
 	TYPE_MAP  = "map[{0}]{1}"
 
-	TYPE_STRING  = ctxVarType("string")
-	TYPE_BOOLEAN = ctxVarType("boolean")
-	TYPE_INTEGER = ctxVarType("int")
-	TYPE_UINT8   = ctxVarType("uint8")
-	TYPE_UINT16  = ctxVarType("uint16")
-	TYPE_UINT32  = ctxVarType("uint32")
-	TYPE_UINT64  = ctxVarType("uint64")
+	TYPE_STRING  = CtxVarType("string")
+	TYPE_BOOLEAN = CtxVarType("boolean")
+	TYPE_INTEGER = CtxVarType("int")
+	TYPE_UINT8   = CtxVarType("uint8")
+	TYPE_UINT16  = CtxVarType("uint16")
+	TYPE_UINT32  = CtxVarType("uint32")
+	TYPE_UINT64  = CtxVarType("uint64")
 )
 
 var (
 	TYPE_LIST_STRING  = listCtxVarTypeOf(TYPE_STRING)
 	TYPE_LIST_INTEGER = listCtxVarTypeOf(TYPE_INTEGER)
+	TYPE_LIST_UINT16  = listCtxVarTypeOf(TYPE_UINT16)
 )
 
 func listCtxVarTypeOf(
-	valueType ctxVarType,
-) ctxVarType {
-	return ctxVarType(sf.Format(TYPE_LIST, valueType))
+	valueType CtxVarType,
+) CtxVarType {
+	return CtxVarType(sf.Format(TYPE_LIST, valueType))
 }
 
 func mapCtxVarTypeOf(
-	keyType ctxVarType,
-	valueType ctxVarType,
-) ctxVarType {
-	return ctxVarType(sf.Format(TYPE_MAP, keyType, valueType))
+	keyType CtxVarType,
+	valueType CtxVarType,
+) CtxVarType {
+	return CtxVarType(sf.Format(TYPE_MAP, keyType, valueType))
 }
 
 func (k *CtxKey) ToCtxKey() string {

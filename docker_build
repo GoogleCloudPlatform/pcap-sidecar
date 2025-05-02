@@ -130,10 +130,10 @@ if [[ -z "${3}" ]]; then
   docker_release `docker_tags "${2}:${IMAGE_TAG}" "${FQDIN}"`
 elif [[ "${3}" == *"-RC" ]]; then
   # flow for release candidates: 3rd arg / tag contains "RC", so do not push to newest/latest
-  echo "Creating release candidate (RC) images: '${2}:${3}-${GEN}', '${FQDIN}', and '${PCAP_COMMIT_ID}'"
-  docker_release `docker_tags "${2}:${3}-${GEN}" "${FQDIN}"`
+  echo "Creating release candidate (RC) images: '${2}:${3}-${GEN}', '${FQDIN}', and '${2}:${PCAP_COMMIT_ID}'"
+  docker_release `docker_tags "${2}:${3}-${GEN}" "${FQDIN}" "${2}:${PCAP_COMMIT_ID}"`
 else
   # flow for non RC version: if a 3rd arg (v#.#.#) without RC is provided then apply both tags
-  echo "Releasing images: '${2}:${IMAGE_TAG}', '${2}:${3}-${GEN}', '${FQDIN}', and '${PCAP_COMMIT_ID}'"
-  docker_release `docker_tags "${2}:${3}-${GEN}" "${2}:${IMAGE_TAG}" "${FQDIN}" "${PCAP_COMMIT_ID}"`
+  echo "Releasing images: '${2}:${IMAGE_TAG}', '${2}:${3}-${GEN}', '${FQDIN}', and '${2}:${PCAP_COMMIT_ID}'"
+  docker_release `docker_tags "${2}:${3}-${GEN}" "${2}:${IMAGE_TAG}" "${FQDIN}" "${2}:${PCAP_COMMIT_ID}"`
 fi

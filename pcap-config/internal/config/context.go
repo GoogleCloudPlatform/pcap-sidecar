@@ -42,8 +42,12 @@ var ctxVars = map[CtxKey]*ctxVar{
 	VerbosityKey:      {"verbosity", TYPE_STRING, false},
 	ExecEnvKey:        {"env.id", TYPE_STRING, false},
 	InstanceIDKey:     {"env.instance.id", TYPE_STRING, true},
-	L3ProtosFilterKey: {"protos.l3", TYPE_LIST_STRING, false},
-	L4ProtosFilterKey: {"protos.l4", TYPE_LIST_STRING, false},
+	FilterKey:         {"filter.bpf", TYPE_STRING, false},
+	HostsFilterKey:    {"filter.hosts", TYPE_LIST_STRING, false},
+	PortsFilterKey:    {"filter.ports", TYPE_LIST_UINT16, false},
+	L3ProtosFilterKey: {"filter.protos.l3", TYPE_LIST_STRING, false},
+	L4ProtosFilterKey: {"filter.protos.l4", TYPE_LIST_STRING, false},
+	TcpFlagsFilterKey: {"filter.tcp.flags", TYPE_LIST_STRING, false},
 }
 
 func newConfigPathError(
@@ -113,8 +117,12 @@ func setCtxVar(
 		value = ktx.String(path)
 	case TYPE_BOOLEAN:
 		value = ktx.Bool(path)
+	case TYPE_UINT16:
+		value = t_uint16(ktx, &path)
 	case TYPE_LIST_STRING:
 		value = ktx.Strings(path)
+	case TYPE_LIST_UINT16:
+		value = t_uint16s(ktx, &path)
 	default:
 		return ctx, newInvalidConfigValueTypeError(&path)
 	}

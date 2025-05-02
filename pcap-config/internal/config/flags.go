@@ -84,6 +84,18 @@ func registerBooleanFlag(
 	}
 }
 
+func registerFlag(
+	flags *pflag.FlagSet,
+	cv *ctxVar,
+	ev *variable,
+) {
+	flags.String(
+		newFlagVarName(ev),
+		ev.defaultValue,
+		ev.description,
+	)
+}
+
 func logFlagRegistrationError(
 	v *variable,
 	err error,
@@ -93,36 +105,12 @@ func logFlagRegistrationError(
 	)
 }
 
-func registerFlag(
-	flags *pflag.FlagSet,
-	cv *ctxVar,
-	ev *variable,
-) error {
-	var err error = nil
-
-	name := newFlagVarName(ev)
-
-	switch cv.typ {
-	case TYPE_STRING, TYPE_LIST_STRING:
-		flags.String(name, ev.defaultValue, ev.description)
-	case TYPE_BOOLEAN:
-		err = registerBooleanFlag(flags, &name, cv, ev)
-	default:
-		path := sf.Format("flag::{0}", ev.name)
-		err = newInvalidConfigValueTypeError(&path)
-	}
-
-	return err
-}
-
 func RegisterFlags(
 	flags *pflag.FlagSet,
 ) {
 	for k, ev := range envVars {
 		if cv, ok := ctxVars[k]; ok {
-			if err := registerFlag(flags, cv, ev); err != nil {
-				logFlagRegistrationError(ev, err)
-			}
+			registerFlag(flags, cv, ev)
 		}
 	}
 }

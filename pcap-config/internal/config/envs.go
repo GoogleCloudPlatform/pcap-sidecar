@@ -76,13 +76,33 @@ var envVars = map[CtxKey]*variable{
 	},
 	L3ProtosFilterKey: {
 		"l3_protos",
-		"icmp,icmp6",
+		"arp,ip,ip6",
 		"list of network layer protocols that should be captured",
 	},
 	L4ProtosFilterKey: {
 		"l4_protos",
-		"tcp,udp",
+		"icmp,icmp6,tcp,udp",
 		"list of transport layer protocols that should be captured",
+	},
+	FilterKey: {
+		"filter",
+		"DISABLED",
+		"BPF filter; overrides any other filters",
+	},
+	HostsFilterKey: {
+		"hosts",
+		"ANY",
+		"comma separated list of FQDNs ( hostnames ) that should be captured",
+	},
+	PortsFilterKey: {
+		"ports",
+		"ANY",
+		"transport layer addresses ( ports ) that should be captured",
+	},
+	TcpFlagsFilterKey: {
+		"tcp_flags",
+		"ANY",
+		"TCP flags that must be set for a packet to be captured",
 	},
 }
 

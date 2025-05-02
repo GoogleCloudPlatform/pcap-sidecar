@@ -7,7 +7,6 @@ if [[ "${PCAP_FSN_ENABLED}" == false ]]; then
     exec sleep infinity
 fi
 
-
 # check for PCAP files export directory only if GCS export strategy is set to `GCS Fuse`
 if [[ "${PCAP_GCS_FUSE}" == true ]]; then
     while : ; do
@@ -15,7 +14,7 @@ if [[ "${PCAP_GCS_FUSE}" == true ]]; then
             && echo "{\"severity\":\"INFO\",\"message\":\"PCAP files directory is now available at: ${PCAP_DIR}\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
             && break
         echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP files directory to be available at: ${PCAP_DIR} ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
-        sleep 1
+        sleep 0.1
     done
 fi
 

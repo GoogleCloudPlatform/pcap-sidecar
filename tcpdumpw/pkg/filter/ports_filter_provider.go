@@ -43,12 +43,14 @@ func (p *PortsFilterProvider) Get(ctx context.Context) (*string, bool) {
 
 	portSet := mapset.NewThreadUnsafeSet(ports...)
 	portSet.Each(func(portStr string) bool {
-		if portStr == "" || strings.EqualFold(portStr, "ALL") || strings.EqualFold(portStr, "ANY") {
-			portSet.Remove(portStr)
-		} else if port, err := strconv.ParseUint(portStr, 10, 16); err != nil || port <= 0xFFFF {
+		if strings.EqualFold(portStr, "ALL") || strings.EqualFold(portStr, "ANY") {
+			portSet.Clear()
+			return true
+		} else if port, err := strconv.
+			ParseUint(portStr, 10, 16); err == nil && port > 0 && port <= 0xFFFF {
 			p.AddPort(uint16(port))
 		} else {
-			// a PORT must be a number not greater than 65535
+			// a PORT must be a number not greater than 65535 ( 0xFFFF )
 			portSet.Remove(portStr)
 		}
 		return false

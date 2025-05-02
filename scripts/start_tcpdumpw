@@ -10,9 +10,19 @@ if [[ "${PCAP_FSN_ENABLED}" == true ]]; then
             && echo "{\"severity\":\"INFO\",\"message\":\"PCAP FS notifier is running\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
             && break
         echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP FS notifier to run ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
-        sleep 1
+        sleep 0.1
     done
 fi
+
+# wait for PCAP config to be available
+while : ; do
+    if [[ -s /cfg/pcap.json  ]]; then
+      echo "{\"severity\":\"NOTICE\",\"message\":\"PCAP config is available\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+      break
+    fi
+    echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP config...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
+    sleep 0.1
+done
 
 EPHEMERAL_PORT_RANGE=`cat /proc/sys/net/ipv4/ip_local_port_range | tr '\t' ' ' | tr -s ' ' | tr ' ' ',' | tr -d '\n'`
 
@@ -34,6 +44,7 @@ set -x
 
 # `exec` allows `/bin/tcpdumpw` to receive signals directly
 exec env /bin/tcpdumpw \
+    -config=/cfg/pcap.json \
     -verbosity="${PCAP_VERBOSITY:-DEBUG}" \
     -debug="${PCAP_DEBUG:-false}" \
     -env="${PCAP_EXEC_ENV:-run}" \

@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-
-exec env /bin/pcapcfg \
-    --template=/pcap.jsonnet \
-    --config=/pcap.json
