@@ -2,16 +2,6 @@
 
 set +x
 
-# wait for PCAP config to be available
-while : ; do
-    if [[ -s /pcap.json  ]]; then
-      echo "{\"severity\":\"NOTICE\",\"message\":\"PCAP config is available\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
-      break
-    fi
-    echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP config...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
-    sleep 1
-done
-
 export GCSFUSE_BIN='/usr/bin/gcsfuse'
 if [[ "${PCAP_RT_ENV}" == "cloud_run_gen1" ]]; then
   # make execution safe for Cloud Run gen1

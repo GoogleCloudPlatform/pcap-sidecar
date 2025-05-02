@@ -27,14 +27,14 @@ import (
 func registerFlags(
 	flags *pflag.FlagSet,
 ) *pflag.FlagSet {
-	flags.String("template", "/pcap.jsonnet", "absolute path of the PCAP config file template")
-	flags.String("config", "/pcap.json", "absolute path where the PCAP config file should be generated")
+	flags.String("template", "/cfg/pcap.jsonnet", "absolute path of the PCAP config file template")
+	flags.String("config", "/cfg/pcap.json", "absolute path where the PCAP config file should be generated")
 
 	return flags
 }
 
 func main() {
-	log.Println(sf.Format("PCAP sidecar @{0}/{1}", cfg.Version, cfg.Build))
+	log.Println(sf.Format("PCAP sidecar v{0}@{1}", cfg.Version, cfg.Build))
 
 	flags := flag.NewFlagSet("pcap", flag.ContinueOnError)
 

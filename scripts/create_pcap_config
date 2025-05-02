@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set +x
+
+exec env /bin/pcapcfg \
+    --template=/cfg/pcap.jsonnet \
+    --config=/cfg/pcap.json

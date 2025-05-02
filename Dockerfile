@@ -40,4 +40,6 @@ COPY ./env/pcapfsn.env /env/pcapfsn.env
 COPY ./env/gcsdir.env /env/gcsdir.env
 COPY ./env/gcsfuse.env /env/gcsfuse.env
 
+COPY ./pcap-config/pcap.jsonnet /cfg/pcap.jsonnet
+
 ENTRYPOINT ["/scripts/init"]

@@ -44,7 +44,7 @@ RUN gofumpt -l -w .
 RUN go mod tidy -compat="${GOLANG_VERSION}"
 RUN go mod download
 RUN go build -v \
-  -ldflags "-X ${GO_MODULE}/internal/config.Version=v${PCAP_VERSION} -X ${GO_MODULE}/internal/config.Build=${PCAP_COMMIT_ID}" \
+  -ldflags "-X ${GO_MODULE}/internal/config.Version=${PCAP_VERSION} -X ${GO_MODULE}/internal/config.Build=${PCAP_COMMIT_ID}" \
   -o /app/bin/${BIN_NAME}
 
 FROM scratch AS releaser

@@ -34,14 +34,18 @@ COPY ./pcap-cli/pkg pkg
 COPY ./pcap-cli/schema schema
 COPY ./pcap-cli/internal internal
 
+RUN go mod tidy -compat="${GOLANG_VERSION}"
+
 # include config
-WORKDIR /app/config
+WORKDIR /app/pcap-config
 
 COPY ./pcap-config/go.mod go.mod
 COPY ./pcap-config/go.sum go.sum
 COPY ./pcap-config/main.go main.go
 COPY ./pcap-config/pkg pkg
 COPY ./pcap-config/internal internal
+
+RUN go mod tidy -compat="${GOLANG_VERSION}"
 
 WORKDIR /app/tcpdumpw
 
@@ -56,8 +60,8 @@ ENV GOARCH=amd64
 RUN go install mvdan.cc/gofumpt@latest
 RUN gofumpt -l -w .
 
-RUN go mod tidy -compat="${GOLANG_VERSION}"
 RUN go mod download
+RUN go mod tidy -compat="${GOLANG_VERSION}"
 RUN go build -a -v -tags json -o /app/tcpdumpw/bin/${BIN_NAME} main.go
 
 FROM scratch AS releaser
