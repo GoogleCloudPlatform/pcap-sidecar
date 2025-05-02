@@ -10,7 +10,7 @@ if [[ "${PCAP_FSN_ENABLED}" == true ]]; then
             && echo "{\"severity\":\"INFO\",\"message\":\"PCAP FS notifier is running\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}" \
             && break
         echo "{\"severity\":\"WARNING\",\"message\":\"Waiting for PCAP FS notifier to run ...\",\"sidecar\":\"${APP_SIDECAR}\",\"module\":\"${PROC_NAME}\"}"
-        sleep 1
+        sleep 0.1
     done
 fi
 
