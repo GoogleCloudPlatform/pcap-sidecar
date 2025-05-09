@@ -16,11 +16,11 @@ package config
 
 import (
 	"context"
+	"errors"
+	"net"
+	"net/http"
 
-	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
-	"github.com/knadh/koanf/parsers/json"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
+	cfg "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
 )
 
 type (
@@ -30,24 +30,65 @@ type (
 		Debug     bool
 		Verbosity PcapVerbosity
 	}
+
+	ConfigClient interface {
+		GetVersion(
+			ctx context.Context,
+		) (string, error)
+
+		GetBuild(
+			ctx context.Context,
+		) (string, error)
+
+		GetHosts(
+			ctx context.Context,
+		) ([]string, error)
+
+		GetPorts(
+			ctx context.Context,
+		) ([]uint16, error)
+	}
 )
 
 const (
 	PCAP_VERBOSITY_INFO  = PcapVerbosity("INFO")
 	PCAP_VERBOSITY_DEBUG = PcapVerbosity("DEBUG")
+
+	localhostURLtemplate = "http://localhost:34567/{1}"
+	socketURLtemplate    = "http://config/{0}"
 )
 
 func LoadJSON(
 	ctx context.Context,
 	configFile string,
 ) (context.Context, error) {
-	k := koanf.New(".")
-	if err := k.Load(
-		file.Provider(configFile),
-		json.Parser(),
-	); err == nil {
-		return config.LoadContext(ctx, k), nil
+	if k, err := cfg.
+		LoadJSON(configFile, "."); err == nil {
+		return cfg.LoadContext(ctx, k), nil
 	} else {
 		return ctx, err
 	}
+}
+
+func NewSocketClient(
+	_ context.Context,
+	configSocket string,
+	clientID string,
+) (ConfigClient, error) {
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("http.DefaultTransport is not a *http.Transport")
+	}
+
+	unixTransport := defaultTransport.Clone()
+	defaultDialContext := unixTransport.DialContext
+	unixTransport.DialContext = func(
+		ctx context.Context,
+		_, _ string,
+	) (net.Conn, error) {
+		return defaultDialContext(ctx, "unix", configSocket)
+	}
+
+	client := http.Client{Transport: unixTransport}
+	return cfg.NewHttpClient(clientID, socketURLtemplate, &client), nil
 }
