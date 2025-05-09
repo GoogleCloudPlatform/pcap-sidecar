@@ -15,46 +15,25 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"os"
 
+	cli "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/cli"
 	cfg "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
-	"github.com/spf13/pflag"
-	flag "github.com/spf13/pflag"
 	sf "github.com/wissance/stringFormatter"
 )
-
-func registerFlags(
-	flags *pflag.FlagSet,
-) *pflag.FlagSet {
-	flags.String("template", "/cfg/pcap.jsonnet", "absolute path of the PCAP config file template")
-	flags.String("config", "/cfg/pcap.json", "absolute path where the PCAP config file should be generated")
-
-	return flags
-}
 
 func main() {
 	log.Println(sf.Format("PCAP sidecar v{0}@{1}", cfg.Version, cfg.Build))
 
-	flags := flag.NewFlagSet("pcap", flag.ContinueOnError)
+	cmd := cli.NewCLI("pcapcfg")
 
-	cfg.RegisterFlags(registerFlags(flags))
-
-	flags.Parse(os.Args[1:])
-
-	template, _ := flags.GetString("template")
-	config, _ := flags.GetString("config")
-
-	if err := cfg.CreateJSON(&template, &config, flags); err != nil {
-		log.Fatalln(
-			sf.Format("failed to create config file: {0}", err.Error()),
-		)
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
 	}
-
-	// other pcap modules can use the generated config file via `config.LoadJSON`
-	log.Println(
-		sf.Format("config file created at: {0}", config),
-	)
 
 	// TODO: move ALL cmd args from all modules to this one and merge them with env vars using:
 	//  - https://pkg.go.dev/github.com/knadh/koanf/providers/posflag

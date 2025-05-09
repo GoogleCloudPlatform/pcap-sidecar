@@ -33,6 +33,7 @@ type (
 const (
 	BuildKey          = CtxKey("build")
 	VersionKey        = CtxKey("version")
+	SupervisorPortKey = CtxKey("supervisor/port")
 	GcpRegionKey      = CtxKey("gcp/region")
 	ProjectIDKey      = CtxKey("gcp/project/id")
 	ProjectNumKey     = CtxKey("gcp/project/number")
@@ -54,7 +55,6 @@ const (
 	ConntrackKey      = CtxKey("feature/conntrack")
 	HealthcheckKey    = CtxKey("feature/healthcheck/port")
 	DebugKey          = CtxKey("feature/debug")
-	SupervisorPortKey = CtxKey("supervisor/port")
 	FilterKey         = CtxKey("filter/bpf")
 	L3ProtosFilterKey = CtxKey("filter/protos/l3")
 	L4ProtosFilterKey = CtxKey("filter/protos/l4")
@@ -73,7 +73,10 @@ const (
 	ExtensionKey      = CtxKey("extension")
 )
 
-const ctxKeyTemplate = "pcap/cfg/{0}"
+const (
+	ctxKeyTemplate = "pcap/cfg/{0}"
+	ktxKeyTemplate = "pcap/{0}"
+)
 
 const (
 	TYPE_LIST = "[]{0}"
@@ -107,6 +110,16 @@ func mapCtxVarTypeOf(
 	return CtxVarType(sf.Format(TYPE_MAP, keyType, valueType))
 }
 
+func (k *CtxKey) toString(
+	template string,
+) string {
+	return sf.Format(template, string(*k))
+}
+
 func (k *CtxKey) ToCtxKey() string {
-	return sf.Format(ctxKeyTemplate, string(*k))
+	return k.toString(ctxKeyTemplate)
+}
+
+func (k *CtxKey) ToKtxKey() string {
+	return k.toString(ktxKeyTemplate)
 }

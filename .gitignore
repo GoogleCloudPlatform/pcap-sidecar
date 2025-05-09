@@ -1,3 +1,5 @@
+.vscode/
+
 bin/
 tmp/
 local_only

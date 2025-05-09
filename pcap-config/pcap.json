@@ -1,0 +1,40 @@
+{
+   "pcap": {
+      "build": "236c293aff0b67763076ec5a9450e33f3a642676",
+      "debug": false,
+      "env": {
+         "id": "run",
+         "instance": {
+            "id": "unknown"
+         }
+      },
+      "filter": {
+         "bpf": "DISABLED",
+         "hosts": [ ],
+         "ports": [ ],
+         "protos": {
+            "l3": [
+               "arp",
+               "ip",
+               "ip6"
+            ],
+            "l4": [
+               "icmp",
+               "icmp6",
+               "tcp",
+               "udp"
+            ]
+         },
+         "tcp": {
+            "flags": [ ]
+         }
+      },
+      "modules": {
+         "cli": { },
+         "fsnotify": { },
+         "tcpdumpw": { }
+      },
+      "verbosity": "DEBUG",
+      "version": "v0.0.0-local"
+   }
+}

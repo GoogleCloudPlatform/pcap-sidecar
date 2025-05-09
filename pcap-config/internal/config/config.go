@@ -20,6 +20,9 @@ import (
 	"strings"
 
 	"github.com/google/go-jsonnet"
+	"github.com/knadh/koanf/parsers/json"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
 	"github.com/spf13/pflag"
 )
 
@@ -88,4 +91,18 @@ func CreateJSON(
 	} else {
 		return err
 	}
+}
+
+func LoadJSON(
+	configFile string,
+	separator string,
+) (*koanf.Koanf, error) {
+	k := koanf.New(separator)
+	if err := k.Load(
+		file.Provider(configFile),
+		json.Parser(),
+	); err != nil {
+		return nil, err
+	}
+	return k, nil
 }

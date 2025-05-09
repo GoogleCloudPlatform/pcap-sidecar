@@ -17,6 +17,7 @@ package config
 import (
 	"context"
 	"errors"
+	"reflect"
 
 	"github.com/knadh/koanf/v2"
 	sf "github.com/wissance/stringFormatter"
@@ -28,9 +29,9 @@ const (
 )
 
 var (
-	invalidConfigValueErr = errors.New("invalid config value type")
-	IllegalConfigStateErr = errors.New("illegal config state")
-	unavailableConfigErr  = errors.New("config not found")
+	errInvalidConfigValue = errors.New("invalid config value type")
+	errIllegalConfigState = errors.New("illegal config state")
+	errUnavailableConfig  = errors.New("config not found")
 )
 
 var ctxVars = map[CtxKey]*ctxVar{
@@ -62,7 +63,7 @@ func newUnavailableConfigError(
 	path *string,
 ) error {
 	return errors.Join(
-		unavailableConfigErr,
+		errUnavailableConfig,
 		newConfigPathError(path),
 	)
 }
@@ -71,7 +72,7 @@ func newInvalidConfigValueTypeError(
 	path *string,
 ) error {
 	return errors.Join(
-		invalidConfigValueErr,
+		errInvalidConfigValue,
 		newConfigPathError(path),
 	)
 }
@@ -80,7 +81,7 @@ func newIllegalConfigStateError(
 	path *string,
 ) error {
 	return errors.Join(
-		IllegalConfigStateErr,
+		errIllegalConfigState,
 		newConfigPathError(path),
 	)
 }
@@ -127,7 +128,7 @@ func setCtxVar(
 		return ctx, newInvalidConfigValueTypeError(&path)
 	}
 
-	return context.WithValue(ctx, k.ToCtxKey(), value), nil
+	return context.WithValue(ctx, *k, value), nil
 }
 
 func LoadContext(
@@ -138,8 +139,132 @@ func LoadContext(
 		if _ctx, err := setCtxVar(ctx, ktx, &k, v); err == nil {
 			ctx = _ctx
 		} else {
-			ctx = context.WithValue(ctx, k.ToCtxKey(), err)
+			ctx = context.WithValue(ctx, k, err)
 		}
 	}
 	return ctx
+}
+
+func newConfigError(
+	key CtxKey,
+	err error,
+) error {
+	return errors.Join(
+		errUnavailableConfig,
+		errors.New(key.ToCtxKey()),
+		err,
+	)
+}
+
+func newInvalidConfigError(
+	key CtxKey,
+	want CtxVarType,
+	value any,
+) error {
+	return errors.Join(
+		errInvalidConfigValue,
+		errors.New(
+			sf.Format(
+				"{0} has invalid type; want: {1}, got: {2}",
+				key.ToCtxKey(), string(want), reflect.TypeOf(value),
+			),
+		),
+	)
+}
+
+func GetBoolean(
+	ctx context.Context,
+	key CtxKey,
+) (bool, error) {
+	value := ctx.Value(key)
+
+	if v, ok := value.(bool); ok {
+		return v, nil
+	} else if err, errOK := value.(error); errOK {
+		return false, newConfigError(key, err)
+	} else {
+		return false, newInvalidConfigError(key, TYPE_BOOLEAN, v)
+	}
+}
+
+func GetBooleanOrDefault(
+	ctx context.Context,
+	key CtxKey,
+	defaultValue bool,
+) bool {
+	if value, err := GetBoolean(ctx, key); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+func GetString(
+	ctx context.Context,
+	key CtxKey,
+) (string, error) {
+	value := ctx.Value(key)
+
+	if v, ok := value.(string); ok {
+		return v, nil
+	} else if err, errOK := value.(error); errOK {
+		return "", newConfigError(key, err)
+	} else {
+		return "", newInvalidConfigError(key, TYPE_STRING, v)
+	}
+}
+
+func GetStringOrDefault(
+	ctx context.Context,
+	key CtxKey,
+	defaultValue string,
+) string {
+	if value, err := GetString(ctx, key); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+func GetStrings(
+	ctx context.Context,
+	key CtxKey,
+) ([]string, error) {
+	value := ctx.Value(key)
+
+	if v, ok := value.([]string); ok {
+		return v, nil
+	} else if err, errOK := value.(error); errOK {
+		return nil, newConfigError(key, err)
+	} else {
+		return nil, newInvalidConfigError(key, TYPE_LIST_STRING, v)
+	}
+}
+
+func GetUint16(
+	ctx context.Context,
+	key CtxKey,
+) (uint16, error) {
+	value := ctx.Value(key)
+
+	if v, ok := value.(uint16); ok {
+		return v, nil
+	} else if err, errOK := value.(error); errOK {
+		return 0, newConfigError(key, err)
+	} else {
+		return 0, newInvalidConfigError(key, TYPE_UINT16, v)
+	}
+}
+
+func GetUint16s(
+	ctx context.Context,
+	key CtxKey,
+) ([]uint16, error) {
+	value := ctx.Value(key)
+
+	if v, ok := value.([]uint16); ok {
+		return v, nil
+	} else if err, errOK := value.(error); errOK {
+		return nil, newConfigError(key, err)
+	} else {
+		return nil, newInvalidConfigError(key, TYPE_LIST_UINT16, v)
+	}
 }
