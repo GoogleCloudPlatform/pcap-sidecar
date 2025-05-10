@@ -1,12 +1,14 @@
 {
    "pcap": {
-      "build": "236c293aff0b67763076ec5a9450e33f3a642676",
-      "debug": false,
+      "build": "4841189e4d6808a3b21b0780cd33812d1e42b098",
       "env": {
          "id": "run",
          "instance": {
             "id": "unknown"
          }
+      },
+      "features": {
+         "debug": false
       },
       "filter": {
          "bpf": "DISABLED",

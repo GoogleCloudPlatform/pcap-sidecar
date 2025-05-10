@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	flagVarPrefix   = "pcap"
+	flagVarPrefix   = CtxKeyPrefix
 	flagVarTemplate = "{0}_{1}"
 )
 
@@ -109,7 +109,7 @@ func RegisterFlags(
 	flags *pflag.FlagSet,
 ) {
 	for k, ev := range envVars {
-		if cv, ok := ctxVars[k]; ok {
+		if cv, ok := CtxVars[k]; ok {
 			registerFlag(flags, cv, ev)
 		}
 	}

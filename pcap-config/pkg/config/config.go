@@ -40,13 +40,9 @@ type (
 			ctx context.Context,
 		) (string, error)
 
-		GetHosts(
+		IsDebug(
 			ctx context.Context,
-		) ([]string, error)
-
-		GetPorts(
-			ctx context.Context,
-		) ([]uint16, error)
+		) (bool, error)
 	}
 )
 
@@ -63,7 +59,7 @@ func LoadJSON(
 	configFile string,
 ) (context.Context, error) {
 	if k, err := cfg.
-		LoadJSON(configFile, "."); err == nil {
+		LoadJSON(configFile); err == nil {
 		return cfg.LoadContext(ctx, k), nil
 	} else {
 		return ctx, err

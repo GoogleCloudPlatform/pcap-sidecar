@@ -16,11 +16,12 @@ package config
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/pkg/pb"
 	sf "github.com/wissance/stringFormatter"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -38,84 +39,63 @@ func (c *HttpClient) newURL(
 	return sf.Format("{0}?ref={1}", base, c.id)
 }
 
+func (c *HttpClient) parsePcapConfigProto(
+	response *http.Response,
+	config *pb.PcapConfig,
+) (*pb.PcapConfig, error) {
+	if data, err := io.
+		ReadAll(response.Body); err == nil {
+		return config, proto.Unmarshal(data, config)
+	} else {
+		return config, err
+	}
+}
+
 func (c *HttpClient) get(
 	_ context.Context,
 	key CtxKey,
-) ([]byte, error) {
+) (*pb.PcapConfig, error) {
+	config := &pb.PcapConfig{}
 	if response, err := c.client.
 		Get(c.newURL(key)); err == nil {
 		defer response.Body.Close()
-		return io.ReadAll(response.Body)
+		return c.parsePcapConfigProto(response, config)
 	} else {
-		return nil, err
-	}
-}
-
-func (c *HttpClient) getString(
-	ctx context.Context,
-	key CtxKey,
-) (string, error) {
-	if data, err := c.get(ctx, key); err == nil {
-		return string(data), nil
-	} else {
-		return "", err
-	}
-}
-
-func (c *HttpClient) getStrings(
-	ctx context.Context,
-	key CtxKey,
-) ([]string, error) {
-	if data, err := c.get(ctx, key); err == nil {
-		var value []string
-		err = json.Unmarshal(data, &value)
-		if err != nil {
-			return nil, err
-		}
-		return value, err
-	} else {
-		return nil, err
-	}
-}
-
-func (c *HttpClient) getUint16s(
-	ctx context.Context,
-	key CtxKey,
-) ([]uint16, error) {
-	if data, err := c.get(ctx, key); err == nil {
-		var value []uint16
-		err = json.Unmarshal(data, &value)
-		if err != nil {
-			return nil, err
-		}
-		return value, err
-	} else {
-		return nil, err
+		return config, err
 	}
 }
 
 func (c *HttpClient) GetVersion(
 	ctx context.Context,
 ) (string, error) {
-	return c.getString(ctx, VerbosityKey)
+	if c, err := c.
+		get(ctx, BuildKey); err == nil {
+		return c.GetVersion(), nil
+	} else {
+		return "", err
+	}
 }
 
 func (c *HttpClient) GetBuild(
 	ctx context.Context,
 ) (string, error) {
-	return c.getString(ctx, BuildKey)
+	if c, err := c.
+		get(ctx, BuildKey); err == nil {
+		return c.GetBuild(), nil
+	} else {
+		return "", err
+	}
 }
 
-func (c *HttpClient) GetHosts(
+func (c *HttpClient) IsDebug(
 	ctx context.Context,
-) ([]string, error) {
-	return c.getStrings(ctx, HostsFilterKey)
-}
-
-func (c *HttpClient) GetPorts(
-	ctx context.Context,
-) ([]uint16, error) {
-	return c.getUint16s(ctx, PortsFilterKey)
+) (bool, error) {
+	if c, err := c.
+		get(ctx, DebugKey); err == nil {
+		return c.Features.GetDebug(), nil
+	} else {
+		return false, err
+	}
 }
 
 func NewHttpClient(

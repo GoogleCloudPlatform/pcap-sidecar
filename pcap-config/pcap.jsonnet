@@ -109,8 +109,9 @@ local pcap_tcp_flags = extSetVar("tcp_flags", std.asciiLower, isValidTCPflag);
         id: pcap_instance_id,
       },
     },
-    debug: pcap_debug,
-    verbosity: pcap_verbosity,
+    features: {
+      debug: pcap_debug,
+    },
     filter: {
       bpf: pcap_filter,
       hosts: pcap_hosts,
@@ -123,6 +124,7 @@ local pcap_tcp_flags = extSetVar("tcp_flags", std.asciiLower, isValidTCPflag);
         flags: pcap_tcp_flags,
       },
     },
+    verbosity: pcap_verbosity,
     modules: {
       cli:{},
       fsnotify:{},

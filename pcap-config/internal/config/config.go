@@ -95,9 +95,8 @@ func CreateJSON(
 
 func LoadJSON(
 	configFile string,
-	separator string,
 ) (*koanf.Koanf, error) {
-	k := koanf.New(separator)
+	k := koanf.New("/")
 	if err := k.Load(
 		file.Provider(configFile),
 		json.Parser(),

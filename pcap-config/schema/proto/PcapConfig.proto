@@ -12,26 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+syntax = "proto3";
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"os"
+option go_package = "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/pkg/pb";
 
-	cli "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/cli"
-	cfg "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
-	sf "github.com/wissance/stringFormatter"
-)
+message PcapConfig {
 
-func main() {
-	log.Println(sf.Format("PCAP sidecar v{0}@{1}", cfg.Version, cfg.Build))
-
-	cmd := cli.NewCLI("pcapcfg")
-
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
+  message PcapFeatures {
+    optional bool debug = 1;
+  }
+  
+  string version        = 1;
+  string build          = 2;
+  PcapFeatures features = 3;
 }
