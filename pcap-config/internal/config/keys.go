@@ -24,9 +24,8 @@ type (
 	CtxVarType string
 
 	ctxVar struct {
-		path     string
-		typ      CtxVarType
-		required bool
+		typ CtxVarType
+		req bool
 	}
 )
 
@@ -44,17 +43,17 @@ const (
 	GcsDirKey         = CtxKey("gcp/storage/directory")
 	GcsBucketKey      = CtxKey("gcp/storage/bucket")
 	GcsExportKey      = CtxKey("gcp/storage/export")
-	GzipKey           = CtxKey("feature/gzip")
-	TcpdumpKey        = CtxKey("feature/tcpdump")
-	JsondumpKey       = CtxKey("feature/json/dump")
-	JsonlogKey        = CtxKey("feature/json/log")
-	FsNotifyKey       = CtxKey("feature/fs-notify")
-	CronKey           = CtxKey("feature/cron/enabled")
-	CronExpressionKey = CtxKey("feature/cron/expression")
-	OrderedKey        = CtxKey("feature/ordered")
-	ConntrackKey      = CtxKey("feature/conntrack")
-	HealthcheckKey    = CtxKey("feature/healthcheck/port")
-	DebugKey          = CtxKey("feature/debug")
+	GzipKey           = CtxKey("features/gzip")
+	TcpdumpKey        = CtxKey("features/tcpdump")
+	JsondumpKey       = CtxKey("features/json/dump")
+	JsonlogKey        = CtxKey("features/json/log")
+	FsNotifyKey       = CtxKey("features/fs-notify")
+	CronKey           = CtxKey("features/cron/enabled")
+	CronExpressionKey = CtxKey("features/cron/expression")
+	OrderedKey        = CtxKey("features/ordered")
+	ConntrackKey      = CtxKey("features/conntrack")
+	HealthcheckKey    = CtxKey("features/healthcheck/port")
+	DebugKey          = CtxKey("features/debug")
 	FilterKey         = CtxKey("filter/bpf")
 	L3ProtosFilterKey = CtxKey("filter/protos/l3")
 	L4ProtosFilterKey = CtxKey("filter/protos/l4")
@@ -74,8 +73,8 @@ const (
 )
 
 const (
-	ctxKeyTemplate = "pcap/cfg/{0}"
-	ktxKeyTemplate = "pcap/{0}"
+	CtxKeyTemplate = CtxKeyPrefix + "/cfg/{0}"
+	KtxKeyTemplate = CtxKeyPrefix + "/{0}"
 )
 
 const (
@@ -117,9 +116,9 @@ func (k *CtxKey) toString(
 }
 
 func (k *CtxKey) ToCtxKey() string {
-	return k.toString(ctxKeyTemplate)
+	return k.toString(CtxKeyTemplate)
 }
 
 func (k *CtxKey) ToKtxKey() string {
-	return k.toString(ktxKeyTemplate)
+	return k.toString(KtxKeyTemplate)
 }

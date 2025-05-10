@@ -30,10 +30,16 @@ tasks:
   proto-gen:
     cmds:
       - >-
-        docker run --user=$USER_ID
-        -v {{.USER_WORKING_DIR}}:/defs
-        namely/protoc-all -d $PB_INPUT_DIR --lint
-        -o $PB_OUTPUT_DIR -l go --go-source-relative
+        docker run -it --rm
+        --user=$USER_ID
+        -v {{.USER_WORKING_DIR}}:/defs:rw
+        namely/protoc-all
+        --lint
+        -d $PB_INPUT_DIR
+        --lint
+        -o $PB_OUTPUT_DIR
+        -l go
+        --go-source-relative
 
   go-fmt:
     cmds:

@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	ctxKeyPrefix       = "pcap"
-	ctxKeyPathTemplate = "{0}.{1}"
+	CtxKeyPrefix       = "pcap"
+	ctxKeyPathTemplate = "{0}/{1}"
 )
 
 var (
@@ -34,21 +34,21 @@ var (
 	errUnavailableConfig  = errors.New("config not found")
 )
 
-var ctxVars = map[CtxKey]*ctxVar{
+var CtxVars = map[CtxKey]*ctxVar{
 	// map from `Context Key` to `Context Variable`
 	// NOTE: keys are automatically prefixed with `pcap.`
-	BuildKey:          {"build", TYPE_STRING, true},
-	VersionKey:        {"version", TYPE_STRING, true},
-	DebugKey:          {"debug", TYPE_BOOLEAN, false},
-	VerbosityKey:      {"verbosity", TYPE_STRING, false},
-	ExecEnvKey:        {"env.id", TYPE_STRING, false},
-	InstanceIDKey:     {"env.instance.id", TYPE_STRING, true},
-	FilterKey:         {"filter.bpf", TYPE_STRING, false},
-	HostsFilterKey:    {"filter.hosts", TYPE_LIST_STRING, false},
-	PortsFilterKey:    {"filter.ports", TYPE_LIST_UINT16, false},
-	L3ProtosFilterKey: {"filter.protos.l3", TYPE_LIST_STRING, false},
-	L4ProtosFilterKey: {"filter.protos.l4", TYPE_LIST_STRING, false},
-	TcpFlagsFilterKey: {"filter.tcp.flags", TYPE_LIST_STRING, false},
+	BuildKey:          {TYPE_STRING, true},
+	VersionKey:        {TYPE_STRING, true},
+	ExecEnvKey:        {TYPE_STRING, false},
+	InstanceIDKey:     {TYPE_STRING, true},
+	DebugKey:          {TYPE_BOOLEAN, false},
+	FilterKey:         {TYPE_STRING, false},
+	HostsFilterKey:    {TYPE_LIST_STRING, false},
+	PortsFilterKey:    {TYPE_LIST_UINT16, false},
+	L3ProtosFilterKey: {TYPE_LIST_STRING, false},
+	L4ProtosFilterKey: {TYPE_LIST_STRING, false},
+	TcpFlagsFilterKey: {TYPE_LIST_STRING, false},
+	VerbosityKey:      {TYPE_STRING, false},
 }
 
 func newConfigPathError(
@@ -66,6 +66,13 @@ func newUnavailableConfigError(
 		errUnavailableConfig,
 		newConfigPathError(path),
 	)
+}
+
+func newUnavailableCtxKeyError(
+	key *CtxKey,
+) error {
+	path := string(*key)
+	return newUnavailableConfigError(&path)
 }
 
 func newInvalidConfigValueTypeError(
@@ -86,10 +93,17 @@ func newIllegalConfigStateError(
 	)
 }
 
+func newIllegalCtxKeyError(
+	key *CtxKey,
+) error {
+	path := string(*key)
+	return newIllegalConfigStateError(&path)
+}
+
 func newCtxKeyPath(
-	v *ctxVar,
+	key *CtxKey,
 ) string {
-	return sf.Format(ctxKeyPathTemplate, ctxKeyPrefix, v.path)
+	return sf.Format(ctxKeyPathTemplate, CtxKeyPrefix, string(*key))
 }
 
 func setCtxVar(
@@ -98,12 +112,12 @@ func setCtxVar(
 	k *CtxKey,
 	v *ctxVar,
 ) (context.Context, error) {
-	path := newCtxKeyPath(v)
+	path := newCtxKeyPath(k)
 	var value any = nil
 
 	isAvailable := ktx.Exists(path)
 
-	if v.required && !isAvailable {
+	if v.req && !isAvailable {
 		return ctx, newUnavailableConfigError(&path)
 	} else if !isAvailable {
 		if envVar, ok := envVars[*k]; ok {
@@ -135,7 +149,7 @@ func LoadContext(
 	ctx context.Context,
 	ktx *koanf.Koanf,
 ) context.Context {
-	for k, v := range ctxVars {
+	for k, v := range CtxVars {
 		if _ctx, err := setCtxVar(ctx, ktx, &k, v); err == nil {
 			ctx = _ctx
 		} else {
@@ -146,7 +160,7 @@ func LoadContext(
 }
 
 func newConfigError(
-	key CtxKey,
+	key *CtxKey,
 	err error,
 ) error {
 	return errors.Join(
@@ -157,7 +171,7 @@ func newConfigError(
 }
 
 func newInvalidConfigError(
-	key CtxKey,
+	key *CtxKey,
 	want CtxVarType,
 	value any,
 ) error {
@@ -172,18 +186,28 @@ func newInvalidConfigError(
 	)
 }
 
+func getCtxVar(
+	ctx context.Context,
+	key *CtxKey,
+) (any, error) {
+	if value := ctx.Value(*key); value == nil {
+		return nil, newUnavailableCtxKeyError(key)
+	} else if err, errOK := value.(error); errOK {
+		return nil, newConfigError(key, err)
+	}
+	return nil, newIllegalCtxKeyError(key)
+}
+
 func GetBoolean(
 	ctx context.Context,
 	key CtxKey,
 ) (bool, error) {
-	value := ctx.Value(key)
-
-	if v, ok := value.(bool); ok {
+	if value, err := getCtxVar(ctx, &key); err != nil {
+		return false, err
+	} else if v, ok := value.(bool); ok {
 		return v, nil
-	} else if err, errOK := value.(error); errOK {
-		return false, newConfigError(key, err)
 	} else {
-		return false, newInvalidConfigError(key, TYPE_BOOLEAN, v)
+		return false, newInvalidConfigError(&key, TYPE_BOOLEAN, v)
 	}
 }
 
@@ -202,14 +226,12 @@ func GetString(
 	ctx context.Context,
 	key CtxKey,
 ) (string, error) {
-	value := ctx.Value(key)
-
-	if v, ok := value.(string); ok {
+	if value, err := getCtxVar(ctx, &key); err != nil {
+		return "", err
+	} else if v, ok := value.(string); ok {
 		return v, nil
-	} else if err, errOK := value.(error); errOK {
-		return "", newConfigError(key, err)
 	} else {
-		return "", newInvalidConfigError(key, TYPE_STRING, v)
+		return "", newInvalidConfigError(&key, TYPE_STRING, v)
 	}
 }
 
@@ -228,14 +250,12 @@ func GetStrings(
 	ctx context.Context,
 	key CtxKey,
 ) ([]string, error) {
-	value := ctx.Value(key)
-
-	if v, ok := value.([]string); ok {
+	if value, err := getCtxVar(ctx, &key); err != nil {
+		return nil, err
+	} else if v, ok := value.([]string); ok {
 		return v, nil
-	} else if err, errOK := value.(error); errOK {
-		return nil, newConfigError(key, err)
 	} else {
-		return nil, newInvalidConfigError(key, TYPE_LIST_STRING, v)
+		return nil, newInvalidConfigError(&key, TYPE_LIST_STRING, v)
 	}
 }
 
@@ -243,14 +263,12 @@ func GetUint16(
 	ctx context.Context,
 	key CtxKey,
 ) (uint16, error) {
-	value := ctx.Value(key)
-
-	if v, ok := value.(uint16); ok {
+	if value, err := getCtxVar(ctx, &key); err != nil {
+		return 0, err
+	} else if v, ok := value.(uint16); ok {
 		return v, nil
-	} else if err, errOK := value.(error); errOK {
-		return 0, newConfigError(key, err)
 	} else {
-		return 0, newInvalidConfigError(key, TYPE_UINT16, v)
+		return 0, newInvalidConfigError(&key, TYPE_UINT16, v)
 	}
 }
 
@@ -258,13 +276,11 @@ func GetUint16s(
 	ctx context.Context,
 	key CtxKey,
 ) ([]uint16, error) {
-	value := ctx.Value(key)
-
-	if v, ok := value.([]uint16); ok {
+	if value, err := getCtxVar(ctx, &key); err != nil {
+		return nil, err
+	} else if v, ok := value.([]uint16); ok {
 		return v, nil
-	} else if err, errOK := value.(error); errOK {
-		return nil, newConfigError(key, err)
 	} else {
-		return nil, newInvalidConfigError(key, TYPE_LIST_UINT16, v)
+		return nil, newInvalidConfigError(&key, TYPE_LIST_UINT16, v)
 	}
 }

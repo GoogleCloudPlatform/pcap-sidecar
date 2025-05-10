@@ -17,10 +17,13 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 
 	cfg "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
 	c "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/pkg/config"
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/pkg/pb"
 	"github.com/knadh/koanf/v2"
 
 	"github.com/gin-gonic/gin"
@@ -28,7 +31,10 @@ import (
 	sf "github.com/wissance/stringFormatter"
 )
 
-const serveCommandContextKey = "pcap/ctx"
+const (
+	serveCommandContextKey = "pcap/ctx"
+	serveCommandKontextKey = "pcap/ktx"
+)
 
 var serveCommandFlags = []cli.Flag{
 	&cli.StringFlag{
@@ -51,32 +57,91 @@ var serveCommandFlags = []cli.Flag{
 	},
 }
 
-func newServeHandler(
-	ktx *koanf.Koanf,
+func serveConfigResponse(
+	gtx *gin.Context,
+	key *cfg.CtxKey,
+	value any,
+	config *pb.PcapConfig,
+) {
+	k := string(*key)
+	v := sf.Format("{0}", value)
+	gtx.Header("x-pcap-config-key", k)
+	gtx.Header("x-pcap-config-value", v)
+	gtx.ProtoBuf(http.StatusOK, config)
+}
+
+func newServeConfigKey(
+	path *string,
+) string {
+	return sf.Format(cfg.KtxKeyTemplate, *path)
+}
+
+func serveConfigKey(
 	ctx context.Context,
+	ktx *koanf.Koanf,
+	gtx *gin.Context,
+	config *pb.PcapConfig,
+	path *string,
+) {
+	key := newServeConfigKey(path)
+	value := ktx.Get(key)
+
+	if value == nil {
+		gtx.ProtoBuf(http.StatusNotFound, config)
+		return
+	}
+
+	ctxKey := cfg.CtxKey(*path)
+
+	serveConfigResponse(gtx, &ctxKey, value,
+		cfg.SetProtoValue(ctx, &ctxKey, config))
+}
+
+func newServeHandler(
+	ctx context.Context,
+	ktx *koanf.Koanf,
 ) gin.HandlerFunc {
 	return func(
 		gtx *gin.Context,
 	) {
-		gtx.Set(serveCommandContextKey, ctx)
-
-		path := gtx.Request.URL.Path
-
-		if path == "/" {
-			gtx.JSON(200, ktx.Raw())
-			return
+		config := &pb.PcapConfig{
+			Version:  c.GetVersion(ctx),
+			Build:    c.GetBuild(ctx),
+			Features: &pb.PcapConfig_PcapFeatures{},
 		}
 
-		key := sf.Format("pcap{0}", path)
-		value := ktx.Get(key)
+		path := strings.Trim(gtx.Request.URL.Path, "/")
 
-		if value == nil {
-			gtx.String(404, "")
-			return
+		if path == "" || path == "/" {
+			gtx.ProtoBuf(http.StatusOK, config)
+		} else {
+			serveConfigKey(ctx, ktx, gtx, config, &path)
 		}
-
-		gtx.JSON(200, value)
 	}
+}
+
+func newServeCommandEngine(
+	ctx context.Context,
+	ktx *koanf.Koanf,
+) *gin.Engine {
+	if c.IsDebugOrDefault(ctx, false) {
+		gin.SetMode(gin.TestMode)
+		gin.ForceConsoleColor()
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+		gin.DisableConsoleColor()
+	}
+
+	rtr := gin.Default()
+
+	rtr.Use(gin.Recovery())
+	rtr.Use(func(gtx *gin.Context) {
+		gtx.Set(serveCommandContextKey, ctx)
+		gtx.Set(serveCommandKontextKey, ktx)
+	})
+	rtr.NoRoute(newServeHandler(ctx, ktx))
+
+	return rtr
 }
 
 func serveCommand(
@@ -86,26 +151,20 @@ func serveCommand(
 	config := cmd.String("config")
 	socket := cmd.String("socket")
 
-	ktx, err := cfg.LoadJSON(config, "/")
+	ktx, err := cfg.LoadJSON(config)
 	if err != nil {
 		return err
 	}
-	ctx = cfg.LoadContext(ctx, ktx)
-
 	fmt.Println(ktx.Sprint())
 
-	if !c.IsDebugOrDefault(ctx, false) {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	ctx = cfg.LoadContext(ctx, ktx)
 
-	r := gin.Default()
-	r.NoRoute(newServeHandler(ktx, ctx))
+	rtr := newServeCommandEngine(ctx, ktx)
 
 	os.Remove(socket)
-	if err := r.RunUnix(socket); err != nil {
+	if err := rtr.RunUnix(socket); err != nil {
 		return err
 	}
-
 	return os.Remove(socket)
 }
 

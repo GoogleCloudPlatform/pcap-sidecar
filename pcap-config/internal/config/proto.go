@@ -12,26 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package config
 
 import (
 	"context"
-	"fmt"
-	"log"
-	"os"
 
-	cli "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/cli"
-	cfg "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/internal/config"
-	sf "github.com/wissance/stringFormatter"
+	"github.com/GoogleCloudPlatform/pcap-sidecar/pcap-config/pkg/pb"
 )
 
-func main() {
-	log.Println(sf.Format("PCAP sidecar v{0}@{1}", cfg.Version, cfg.Build))
-
-	cmd := cli.NewCLI("pcapcfg")
-
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+func SetProtoValue(
+	ctx context.Context,
+	key *CtxKey,
+	config *pb.PcapConfig,
+) *pb.PcapConfig {
+	switch *key {
+	case DebugKey:
+		config.Features.Debug = GetBooleanOrDefault(ctx, *key, false)
 	}
+
+	return config
 }

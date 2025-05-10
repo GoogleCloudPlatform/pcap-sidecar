@@ -54,6 +54,22 @@ tasks:
       - gofumpt -l -w ./internal/
       - gofumpt -l -w ./pkg/
 
+  podman-proto-gen:
+    cmds:
+      - >-
+        podman run -it --rm
+        --user=$FLAG_USER_ID
+        --uidmap=0:1:$FLAG_USER_ID
+        --uidmap=$FLAG_USER_ID:0:1
+        --uidmap=$FLAG_UID_MAP
+        -v {{.USER_WORKING_DIR}}:/defs:Z
+        namely/protoc-all
+        --lint
+        -d $PB_INPUT_DIR
+        -o $PB_OUTPUT_DIR
+        -l go
+        --go-source-relative
+
   build:
     dotenv: [".env"]
     cmds:
