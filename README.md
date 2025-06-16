@@ -155,6 +155,10 @@ The **PCAP sidecar** accepts the following environment variables:
 
   > This is useful when [`Wireshark`](https://www.wireshark.org/) is not available, as it makes it possible to have all captured packets available in [**Cloud Logging**](https://cloud.google.com/logging/docs/structured-logging)
 
+- `PCAP_VERBOSITY`: (STRING, _optional_) verbosity of JSON translations; default value is `DEBUG`; options include:
+  -  `DEBUG`: translations will contain all possible information, including HTTP analysis
+  -  `INFO`: translations will contain minimum amount of information.
+
 - `PCAP_GCS_BUCKET`: (STRING, _optional_) the name of the Cloud Storage Bucket used to store **PCAP files**. If not provided, no files will pushed to GCS and `PCAP_GCS_FUSE`, `PCAP_TCPDUMP`, & `PCAP_JSON` will be set to `false` and are effectively disabled.
 
   > Ensure that you provide the runtime service account the `roles/storage.admin` so that it may create objects and read bucket metadata.
@@ -339,7 +343,7 @@ More advanced use cases may benefit from scheduling `tcpdump` executions. Use th
 > [!TIP]
 > If you prefer to let Cloud Build perform all the tasks, go directly to build [using Cloud Build](#using-cloud-build)
 
-3. Move into the repository local directory: `cd cloud-run-tcpdump`.
+3. Move into the repository local directory: `cd pcap-sidecar`.
 
 Continue with one of the following alternatives:
 
