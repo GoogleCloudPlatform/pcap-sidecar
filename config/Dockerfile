@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GOLANG_VERSION='1.23.7'
+ARG GOLANG_VERSION='1.24.0'
 
 FROM --platform=linux/amd64 golang:${GOLANG_VERSION}-bookworm AS builder
 
-ARG GOLANG_VERSION='1.23.7'
+ARG GOLANG_VERSION='1.24.0'
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BIN_NAME=pcapcfg
