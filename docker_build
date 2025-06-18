@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# set -eux -o pipefail
+set -eux -o pipefail
 
 # the 1st argument of this script expects the name of the environment to build for
 source $(pwd)/env/${1}.env
@@ -54,11 +54,6 @@ function docker_build_base {
     --label="TCPDUMP_VERSION=${TCPDUMP_VERSION}" \
     --tag="pcap-${1}:${DOCKER_TAG_SUFFIX}" \
     ${BASE_IMAGE_DIR}
-  
-  if [ $? -ne 0 ]; then
-    echo "failed to build: ${DOCKER_FILE}"
-    kill -s TERM $MAIN_PID
-  fi
 }
 
 function docker_build {
@@ -71,11 +66,6 @@ function docker_build {
     --build-arg="LIBPCAP_VERSION=${LIBPCAP_VERSION}" \
     --build-arg="TCPDUMP_VERSION=${TCPDUMP_VERSION}" \
     --no-cache --output "${BIN_DIR}" --target releaser .
-
-  if [ $? -ne 0 ]; then
-    echo "failed to build: ${1}"
-    kill -s TERM $MAIN_PID
-  fi
 }
 
 function docker_release {
