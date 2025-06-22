@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/pcap-sidecar/pcap-fsnotify
 
-go 1.23.7
+go 1.24.0
 
 require (
 	cloud.google.com/go/storage v1.51.0

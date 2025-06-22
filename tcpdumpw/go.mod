@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/pcap-sidecar/tcpdumpw
 
-go 1.23.7
+go 1.24.0
 
 require github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli v0.0.0
 
