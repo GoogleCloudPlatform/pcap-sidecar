@@ -1,26 +1,14 @@
-// Copyright 2024 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/GoogleCloudPlatform/pcap-sidecar/pcap-cli/internal/pb";
 
+// Main Packet message that aggregates all layer information.
 message Packet {
 
-  message Pcap {
+  // ---- Metadata and High-Level Information ----
+  message PcapInfo {
     string context = 1;
     uint64 serial = 2;
   }
@@ -29,6 +17,8 @@ message Packet {
     bool truncated = 1;
     uint64 length = 2;
     uint64 capture_length = 3;
+    uint64 flow_id = 4;
+    google.protobuf.Timestamp timestamp = 5;
   }
 
   message Interface {
@@ -37,75 +27,340 @@ message Packet {
     repeated string addrs = 3;
   }
 
+  message Error {
+    string msg = 1;
+    string trace = 2;
+    string layer = 3;
+  }
+  
+  message Endpoints {
+    string src = 1;
+    string dst = 2;
+    string fwd = 3;
+    string bwd = 4;
+    string hash = 5;
+  }
+
+  // ---- Layer 2: Data Link ----
+  message Ethernet {
+    string source_mac = 1;
+    string destination_mac = 2;
+    string ethernet_type = 3;
+  }
+
   message Layer2 {
-    string source = 1;
-    string target = 2;
-    string type = 3;
+      oneof protocol {
+          Ethernet ethernet = 1;
+      }
+  }
+
+  // ---- Layer 3: Network ----
+  message IPv4 {
+    message IPv4Option {
+      uint32 option_type = 1;
+      uint32 option_length = 2;
+      bytes option_data = 3;
+    }
+    bytes source_ip = 1;
+    bytes destination_ip = 2;
+    uint32 version = 3;
+    uint32 ihl = 4;
+    uint32 tos = 5;
+    uint32 length = 6;
+    uint32 id = 7;
+    string flags = 8;
+    uint32 frag_offset = 9;
+    uint32 ttl = 10;
+    string protocol = 11;
+    uint32 checksum = 12;
+    repeated IPv4Option options = 13;
+  }
+
+  message IPv6 {
+    message TrafficClass {
+        uint32 raw = 1;
+        uint32 dsf = 2; // Differentiated Services Field
+        uint32 ecn = 3; // Explicit Congestion Notification
+    }
+    bytes source_ip = 1;
+    bytes destination_ip = 2;
+    uint32 version = 3;
+    TrafficClass traffic_class = 4;
+    uint32 flow_label = 5;
+    uint32 length = 6;
+    string next_header = 7;
+    uint32 hop_limit = 8;
+  }
+
+  message ARP {
+    string addr_type = 1;
+    string protocol = 2;
+    uint32 hw_addr_size = 3;
+    uint32 prot_addr_size = 4;
+    uint32 operation = 5;
+    bytes source_hw_address = 6;
+    bytes source_prot_address = 7;
+    bytes dest_hw_address = 8;
+    bytes dest_prot_address = 9;
+    uint64 flow_id = 10;
   }
 
   message Layer3 {
-    string source = 1;
-    string target = 2;
+    uint64 flow_id = 1;
+    oneof protocol {
+      IPv4 ipv4 = 2;
+      IPv6 ipv6 = 3;
+    }
+    optional Endpoints endpoints = 4;
   }
 
-  message L3ProtoIPv4 {
-    bytes source = 1;
-    bytes target = 2;
+  message ICMPv4 {
+    uint32 type = 1;
+    uint32 code = 2;
+    uint32 checksum = 3;
+    string msg = 4;
+    // For Echo Request/Reply
+    uint32 id = 5;
+    uint32 seq = 6;
+    // For Redirect
+    string redirect_target = 7;
+    // For encapsulated headers
+    optional IPv4 original_ipv4_header = 8;
   }
 
-  message L3ProtoIPv6 {
-    bytes source = 1;
-    bytes target = 2;
+  message ICMPv6 {
+    uint32 type = 1;
+    uint32 code = 2;
+    uint32 checksum = 3;
+    string msg = 4;
+    // For Echo Request/Reply
+    uint32 identifier = 5;
+    uint32 seq_number = 6;
+    // For Redirect
+    bytes redirect_target_address = 7;
+    bytes redirect_destination_address = 8;
+    // For encapsulated headers
+    optional IPv6 original_ipv6_header = 9;
   }
 
-  message L4ProtoUDP {
-    uint32 source = 1;
-    uint32 target = 2;
+  // ---- Layer 4: Transport ----
+  message TCP {
+    message TCPOption {
+      string kind = 1;
+      uint32 length = 2;
+      bytes data = 3;
+    }
+    message TcpFlags {
+      uint32 raw = 1;
+      string str = 2; // String representation, e.g., "SYN|ACK"
+      bool fin = 3;
+      bool syn = 4;
+      bool rst = 5;
+      bool psh = 6;
+      bool ack = 7;
+      bool urg = 8;
+      bool ece = 9;
+      bool cwr = 10;
+      bool ns = 11;
+    }
+    uint32 source_port = 1;
+    string sproto = 2;
+    uint32 destination_port = 3;
+    string dproto = 4;
+    uint32 seq = 5;
+    uint32 ack = 6;
+    uint32 data_offset = 7;
+    TcpFlags flags = 8;
+    uint32 window = 9;
+    uint32 checksum = 10;
+    uint32 urgent = 11;
+    repeated TCPOption options = 12;
   }
 
-  message TcpFlags {
-
-    uint32 flags = 1;
-
-    bool syn = 2;
-    bool ack = 3;
-    bool psh = 4;
-    bool fin = 5;
-    bool rst = 6;
-    bool urg = 7;
-    bool ece = 8;
-    bool cwr = 9;
-
+  message UDP {
+    uint32 source_port = 1;
+    string sproto = 2;
+    uint32 destination_port = 3;
+    string dproto = 4;
+    uint32 length = 5;
+    uint32 checksum = 6;
   }
 
-  message L4ProtoTCP {
-    uint32 source = 1;
-    uint32 target = 2;
-
-    uint32 seq = 3;
-    uint32 ack = 4;
-
-    TcpFlags flags = 5;
+  message Layer4 {
+    uint64 flow_id = 1;
+    oneof protocol {
+      TCP tcp = 2;
+      UDP udp = 3;
+    }
+    optional Endpoints endpoints = 4;
   }
 
-  Pcap pcap = 1;
-
-  Metadata meta = 2;
-  
-  google.protobuf.Timestamp timestamp = 3;
-  
-  Interface iface = 4;
-  
-  Layer2 l2 = 5;
-  
-  oneof l3 {
-    Layer3 ip = 6;
-    L3ProtoIPv4 ip4 = 7;
-    L3ProtoIPv6 ip6 = 8;
+  // ---- Layer 7: Application ----
+  message Layer7 {
+    message HeaderValues {
+        repeated string value = 1;
+    }
+    message HttpError {
+        string code = 1;
+        string info = 2;
+    }
+    message Http1Info {
+      string kind = 1;
+      string url = 2;
+      string method = 3;
+      string proto = 4;
+      map<string, HeaderValues> headers = 5;
+      uint32 status_code = 6;
+      string status = 7;
+    }
+    message Http2Frame {
+      message FrameFlags {
+        string binary = 1;
+        string hex = 2;
+        uint32 decimal = 3;
+      }
+      string raw_header = 1;
+      uint32 length = 2;
+      FrameFlags flags = 3;
+      string type = 4;
+      string kind = 5;
+      map<string, HeaderValues> headers = 6;
+      bytes data = 7;
+    }
+    message Http2Stream {
+      uint32 id = 1;
+      repeated Http2Frame frames = 2;
+    }
+    message HttpInfo {
+      oneof protocol_info {
+        Http1Info http1 = 1;
+        Http2Stream http2_stream = 2;
+      }
+      bool preface = 3;
+      optional HttpError error = 4;
+    }
+    uint64 size = 1;
+    bytes raw = 2;
+    uint64 length = 3;
+    bytes sample = 4;
+    bytes content = 5;
+    optional HttpInfo http = 6;
   }
 
-  oneof l4 {
-    L4ProtoUDP udp = 9;
-    L4ProtoTCP tcp = 10;
+  message DNS {
+    message DNSQuestion {
+      bytes name = 1;
+      string type = 2;
+      string class = 3;
+    }
+    message DNSResourceRecord {
+      message SOAData {
+        bytes m_name = 1;
+        bytes r_name = 2;
+        uint32 serial = 3;
+        uint32 refresh = 4;
+        uint32 retry = 5;
+        uint32 expire = 6;
+        uint32 minimum = 7;
+      }
+      message SRVData {
+        uint32 priority = 1;
+        uint32 weight = 2;
+        uint32 port = 3;
+        bytes name = 4;
+      }
+      message MXData {
+        uint32 preference = 1;
+        bytes name = 2;
+      }
+      message URIData {
+        uint32 priority = 1;
+        uint32 weight = 2;
+        bytes target = 3;
+      }
+      message DNSOPT {
+        string code = 1;
+        bytes data = 2;
+      }
+      bytes name = 1;
+      string type = 2;
+      string class = 3;
+      uint32 ttl = 4;
+      oneof rdata {
+        string ip = 5;
+        bytes ns = 6;
+        bytes cname = 7;
+        bytes ptr = 8;
+        string txt = 9;
+        SOAData soa = 10;
+        SRVData srv = 11;
+        MXData mx = 12;
+        URIData uri = 13;
+        DNSOPT opt = 14;
+      }
+    }
+    uint32 id = 1;
+    bool qr = 2;
+    string op_code = 3;
+    bool aa = 4;
+    bool tc = 5;
+    bool rd = 6;
+    bool ra = 7;
+    uint32 z = 8;
+    string response_code = 9;
+    uint32 qd_count = 10;
+    uint32 an_count = 11;
+    uint32 ns_count = 12;
+    uint32 ar_count = 13;
+    repeated DNSQuestion questions = 14;
+    repeated DNSResourceRecord answers = 15;
+    repeated DNSResourceRecord authorities = 16;
+    repeated DNSResourceRecord additionals = 17;
   }
+
+  message TLS {
+    message TLSRecordHeader {
+      string content_type = 1;
+      string version = 2;
+      uint32 length = 3;
+    }
+    message TLSHandshakeRecord {
+      TLSRecordHeader header = 1;
+    }
+    message TLSAlertRecord {
+      TLSRecordHeader header = 1;
+      string level = 2;
+      string description = 3;
+    }
+    message TLSChangeCipherSpecRecord {
+      TLSRecordHeader header = 1;
+      string message = 2;
+    }
+    message TLSAppDataRecord {
+      TLSRecordHeader header = 1;
+      bytes payload = 2;
+    }
+    repeated TLSHandshakeRecord handshake_records = 1;
+    repeated TLSAlertRecord alert_records = 2;
+    repeated TLSChangeCipherSpecRecord change_cipher_spec_records = 3;
+    repeated TLSAppDataRecord app_data_records = 4;
+  }
+
+  // ---- Top-Level Packet Fields ----
+  PcapInfo pcap_info = 1;
+  Metadata metadata = 2;
+  Interface interface_info = 4;
+  Error error_info = 5;
+  uint64 flow_id = 6;
+
+  // Layer Protocols
+  optional Layer2 l2 = 7;
+  optional Layer3 l3 = 9;
+  optional ARP arp = 11;
+  optional ICMPv4 icmpv4 = 12;
+  optional ICMPv6 icmpv6 = 13;
+  optional Layer4 l4 = 14;
+  optional Layer7 l7 = 18;
+  optional DNS dns = 16;
+  optional TLS tls = 17;
 }
