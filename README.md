@@ -381,6 +381,156 @@ This approach assumes that Artifact Registry is available in `PROJECT_ID`.
 
 > See the full list of available flags for `gcloud builds submit`: https://cloud.google.com/sdk/gcloud/reference/builds/submit
 
+# Using with GKE
+
+## Create a cluster
+
+If you do not have an existing cluster, create one:
+
+```sh
+gcloud container clusters create ${CLUSTER_NAME} \
+  --project=${PROJECT_ID} \
+  --region=${SERVICE_REGION} \
+  --workload-pool=${PROJECT_ID}.svc.id.goog
+```
+
+## Configure `kubectl` to point to your cluster
+
+```sh
+gcloud container clusters get-credentials ${CLUSTER_NAME} \
+  --project=${PROJECT_ID} \
+  --region=${SERVICE_REGION}
+```
+
+## Configure Google and Kubernetes service accounts
+
+<details>
+<summary>Create GSA and KSA, grant permissions, and link the service accounts</summary>
+<br>
+Create a Google Service Account (GSA):
+
+```sh
+gcloud iam service-accounts create ${GSA_NAME} \
+  --project=${PROJECT_ID}
+```
+
+Grant the GSA permissions to write Cloud Logging logs (default `pcap-sidecar` behavior):
+
+```sh
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+  --member="serviceAccount:${GSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/logging.logWriter"
+```
+
+(Optional) Grant GCS permissions if you plan to write pcap files to a bucket (non-default `pcap-sidecar` behavior):
+
+```sh
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+  --member="serviceAccount:${GSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+```
+
+Allow the Kubernetes Service Account (KSA) to impersonate the Google Service Account:
+
+```sh
+gcloud iam service-accounts add-iam-policy-binding \
+  ${GSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com \
+  --project=${PROJECT_ID} \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="serviceAccount:${PROJECT_ID}.svc.id.goog[${NAMESPACE}/${KSA_NAME}]"
+```
+
+Create the Kubernetes Service Account (KSA):
+
+```sh
+kubectl create serviceaccount ${KSA_NAME} --namespace ${NAMESPACE}
+```
+
+Annotate the KSA to link it to the GSA:
+
+```sh
+kubectl annotate serviceaccount ${KSA_NAME} \
+  --namespace ${NAMESPACE} \
+  iam.gke.io/gcp-service-account=${GSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
+```
+</details>
+
+## Create the GKE deployment manifest
+
+Create a GKE deployment manifest file (`deployment.yaml`) that specifies the following for the `pcap-sidecar` container:
+
+- image: `us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar:newest`
+- securityContext: `NET_RAW` & `NET_ADMIN`
+- environment variables:
+  - `PCAP_EXEC_ENV`: `gke`
+  - `PCAP_IFACE`: `any`
+  - `PCAP_L4_PROTOS`: `tcp` (or whatever protocols you intend to filter on)
+
+Example `deployment.yaml`
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-with-pcap
+  labels:
+    app: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      serviceAccountName: pcap-ksa # REPLACE: Use the Kubernetes Service Account you created and linked to the GSA
+      containers:
+      # --- YOUR MAIN APPLICATION CONTAINER ---
+      # Replace this with your actual application's configuration
+      - name: my-app-container
+        image: us-docker.pkg.dev/google-samples/containers/gke/hello-app:1.0 # <-- REPLACE with your app image
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+
+      # --- PCAP SIDECAR CONTAINER ---
+      - name: pcap-sidecar
+        image: us-central1-docker.pkg.dev/pcap-sidecar/pcap-sidecar/pcap-sidecar:newest
+        securityContext:
+          capabilities:
+            add:
+              - "NET_RAW"
+              - "NET_ADMIN"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+        env:
+        - name: "PCAP_L4_PROTOS"
+          value: "tcp" # <-- REPLACE with your desired protocols
+        - name: "PCAP_EXEC_ENV"
+          value: "gke"     # Required for GKE environment
+        - name: "PCAP_IFACE"
+          value: "any"
+```
+
+Apply the manifest to your cluster:
+
+```sh
+kubectl apply -f deployment.yaml
+```
+
 # Using with App Engine Flexible
 
 1.  Enable debug mode an App Engine Flexible instance: https://cloud.google.com/appengine/docs/flexible/debugging-an-instance#enabling_and_disabling_debug_mode
