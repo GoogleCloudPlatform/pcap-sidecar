@@ -20,7 +20,7 @@ FROM golang:${GOLANG_VERSION}-alpine AS builder
 ARG GIT_VERSION='2.47.1-r0'
 ARG PATCH_VERSION='2.7.6-r10'
 
-ARG GCSFUSE_VERSION='2.7.0'
+ARG GCSFUSE_VERSION='3.7.2'
 ARG GCSFUSE_REPO='/run/gcsfuse'
 
 RUN apk add --no-cache --update git patch

@@ -22,7 +22,7 @@ FROM pcap-base:libpcap-v${LIBPCAP_VERSION}_tcpdump-v${TCPDUMP_VERSION} AS base
 FROM --platform=linux/amd64 ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG GCSFUSE_VERSION='2.7.0'
+ARG GCSFUSE_VERSION='3.7.2'
 
 WORKDIR /app
 
