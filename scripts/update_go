@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+go mod edit -go=1.25.8 pcap-cli/go.mod
+cd pcap-cli
+go get -u ./...
+go mod tidy
+cd ..
+go mod edit -go=1.25.8 config/go.mod
+cd config
+go get -u ./...
+go mod tidy
+cd ..
+go mod edit -go=1.25.8 tcpdumpw/go.mod
+cd tcpdumpw
+go get -u ./...
+go mod tidy
+cd ..
+go mod edit -go=1.25.8 pcap-fsnotify/go.mod
+cd pcap-fsnotify
+go get -u ./...
+go mod tidy
+cd ..

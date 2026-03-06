@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GOLANG_VERSION='1.23.4'
+ARG GOLANG_VERSION='1.25.8'
 
 FROM golang:${GOLANG_VERSION}-alpine AS builder
 
